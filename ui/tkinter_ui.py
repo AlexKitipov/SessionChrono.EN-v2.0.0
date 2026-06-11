@@ -2,26 +2,18 @@ import os
 import subprocess
 import sys
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog
 
 from core.chrono import ClipboardMonitor
-from core.config import (
-    APP_NAME,
-    APP_VERSION,
-    ensure_user_directories,
-)
+from core.config import ensure_user_directories
 from core.logger import APP_LOG_DIR, get_logger, log_shutdown, log_startup
 from core.storage import get_default_storage_manager
 from core.utils import build_filename
 from ui.sounds import SoundManager
-from ui.styles import (
-    COLOR_WINDOW_BG,
-    FONT_EDITOR,
-    FONT_LABEL_BOLD,
-    create_dark_menu,
-    apply_window_style,
-)
-from ui.widgets import ClipboardHistoryList, ScrollableText, SearchResultsList, StatusBar
+from ui.components import ClipboardHistoryPanel, EditorPanel, LastCopiedPanel
+from ui.dialogs import EntryDetailsDialog, SearchDialog, SettingsDialog, show_about
+from ui.styles import create_dark_menu, apply_window_style
+from ui.widgets import StatusBar
 
 logger = get_logger()
 
@@ -44,6 +36,7 @@ class SessionChronoUI(tk.Tk):
 
         self._build_menu()
         self._build_layout()
+        self._bind_shortcuts()
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -61,10 +54,10 @@ class SessionChronoUI(tk.Tk):
 
         # FILE
         file_menu = create_dark_menu(menubar)
-        file_menu.add_command(label="New", command=self.new_file)
-        file_menu.add_command(label="Open...", command=self.open_file)
-        file_menu.add_command(label="Save", command=self.save_file)
-        file_menu.add_command(label="Save As...", command=self.save_file_as)
+        file_menu.add_command(label="New", accelerator="Ctrl+N", command=self.new_file)
+        file_menu.add_command(label="Open...", accelerator="Ctrl+O", command=self.open_file)
+        file_menu.add_command(label="Save", accelerator="Ctrl+S", command=self.save_file)
+        file_menu.add_command(label="Save As...", accelerator="Ctrl+Shift+S", command=self.save_file_as)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.on_close)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -73,6 +66,7 @@ class SessionChronoUI(tk.Tk):
         tools_menu = create_dark_menu(menubar)
         tools_menu.add_command(
             label="Pause / Resume Monitoring",
+            accelerator="Ctrl+P",
             command=self.toggle_logging,
         )
         tools_menu.add_command(
@@ -89,7 +83,16 @@ class SessionChronoUI(tk.Tk):
         )
         tools_menu.add_command(
             label="Search Logs",
+            accelerator="Ctrl+F",
             command=self.search_logs_ui,
+        )
+        tools_menu.add_command(
+            label="Settings",
+            command=self.show_settings,
+        )
+        tools_menu.add_command(
+            label="Entry Details",
+            command=self.show_entry_details,
         )
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
@@ -109,52 +112,39 @@ class SessionChronoUI(tk.Tk):
         main_frame.columnconfigure(1, weight=2)
         main_frame.rowconfigure(0, weight=1)
 
-        # LEFT — EDITOR
-        left_frame = ttk.Frame(main_frame)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
-        left_frame.rowconfigure(0, weight=1)
-        left_frame.columnconfigure(0, weight=1)
-
-        self.editor_panel = ScrollableText(left_frame, font=FONT_EDITOR, undo=True)
-        self.editor_panel.grid(row=0, column=0, sticky="nsew")
+        self.editor_panel = EditorPanel(main_frame)
+        self.editor_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         self.editor = self.editor_panel.text
 
-        # RIGHT — PANEL
         right_frame = ttk.Frame(main_frame)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
-
-        right_frame.rowconfigure(1, weight=1)
-        right_frame.rowconfigure(3, weight=2)
+        right_frame.rowconfigure(0, weight=1)
+        right_frame.rowconfigure(1, weight=2)
         right_frame.columnconfigure(0, weight=1)
 
-        ttk.Label(
-            right_frame,
-            text="Last Copied",
-            font=FONT_LABEL_BOLD,
-        ).grid(row=0, column=0, sticky="w")
-
-        self.last_clip_panel = ScrollableText(right_frame, height=12)
-        self.last_clip_panel.grid(row=1, column=0, sticky="nsew")
+        self.last_clip_panel = LastCopiedPanel(right_frame)
+        self.last_clip_panel.grid(row=0, column=0, sticky="nsew")
         self.last_clip_box = self.last_clip_panel.text
 
-        ttk.Label(
+        self.history_component = ClipboardHistoryPanel(
             right_frame,
-            text="Clipboard History",
-            font=FONT_LABEL_BOLD,
-        ).grid(row=2, column=0, sticky="w", pady=(10, 5))
-
-        self.history_component = ClipboardHistoryList(right_frame, self.on_history_select)
-        self.history_component.grid(row=3, column=0, sticky="nsew")
+            self.on_history_select,
+            self.clear_history,
+        )
+        self.history_component.grid(row=1, column=0, sticky="nsew")
         self.history_list = self.history_component.listbox
-
-        ttk.Button(
-            right_frame,
-            text="Clear Session History",
-            command=self.clear_history,
-        ).grid(row=4, column=0, sticky="ew", pady=(10, 0))
 
         self.status_bar = StatusBar(self, self.status_var)
         self.status_bar.pack(side="bottom", fill="x")
+
+    def _bind_shortcuts(self):
+        self.bind_all("<Control-n>", lambda _event: self.new_file())
+        self.bind_all("<Control-o>", lambda _event: self.open_file())
+        self.bind_all("<Control-s>", lambda _event: self.save_file())
+        self.bind_all("<Control-Shift-S>", lambda _event: self.save_file_as())
+        self.bind_all("<Control-F>", lambda _event: self.search_logs_ui())
+        self.bind_all("<Control-f>", lambda _event: self.search_logs_ui())
+        self.bind_all("<Control-p>", lambda _event: self.toggle_logging())
 
     # ---------- CLIPBOARD EVENT ----------
     def handle_new_clipboard_item(self, text: str):
@@ -171,8 +161,7 @@ class SessionChronoUI(tk.Tk):
 
             self.refresh_history()
 
-            self.last_clip_box.delete("1.0", tk.END)
-            self.last_clip_box.insert("1.0", text)
+            self.last_clip_panel.set_text(text)
 
             self.status_var.set(f"Saved clipboard: {item_title}")
             self.sound.play("copy")
@@ -358,69 +347,38 @@ class SessionChronoUI(tk.Tk):
             self.sound.play("error")
 
     def search_logs_ui(self):
-        query = simpledialog.askstring("Search Logs", "Enter text:")
-        if not query:
-            return
+        dialog = SearchDialog(
+            self,
+            self.storage,
+            self.open_search_result,
+            self.report_dialog_error,
+        )
+        dialog.show()
 
-        try:
-            matches = self.storage.search_logs(query)
-        except Exception as e:
-            logger.exception("Search failed for query: %r", query)
-            self.status_var.set(f"Search failed: {e}")
-            self.sound.play("error")
-            return
-        if not matches:
-            messagebox.showinfo("Search Logs", "No matches found.")
-            return
+    def open_search_result(self, path: str, content: str):
+        self.editor_panel.set_text(content)
+        self.current_file_path = path
+        self.status_var.set(f"Opened from search: {os.path.basename(path)}")
+        self.sound.play("open")
 
-        win = tk.Toplevel(self)
-        win.title("Search Results")
-        win.geometry("600x400")
-        win.configure(bg=COLOR_WINDOW_BG)
-
-        lb = SearchResultsList(win)
-        lb.pack(fill="both", expand=True, padx=10, pady=10)
-
-        logger.info("Search UI found %d match(es) for query: %r", len(matches), query)
-        for result in matches:
-            lb.insert(
-                tk.END,
-                f"{result.relative_path}:{result.line_number} — {result.snippet}",
-            )
-
-        def open_selected(_event=None):
-            sel = lb.curselection()
-            if not sel:
-                return
-            result_item = matches[sel[0]]
-            path = result_item.path
-            try:
-                result = self.storage.load_text(path)
-                if not result.success:
-                    raise RuntimeError(result.error or result.message)
-                content = result.content
-                self.editor.delete("1.0", tk.END)
-                self.editor.insert("1.0", content)
-                self.current_file_path = path
-                self.status_var.set(
-                    f"Opened from search: {os.path.basename(path)}"
-                )
-                self.sound.play("open")
-                win.destroy()
-            except Exception as e:
-                logger.exception("Failed to open search result: %s", path)
-                self.status_var.set(f"Error: {e}")
-                self.sound.play("error")
-
-        lb.bind("<Double-Button-1>", open_selected)
+    def report_dialog_error(self, message: str):
+        self.status_var.set(message)
+        self.sound.play("error")
 
     # ---------- ABOUT ----------
     def show_about(self):
-        messagebox.showinfo(
-            "About SessionChrono",
-            f"{APP_NAME} {APP_VERSION} – Smart clipboard-logging notepad\n"
-            "Automatically saves copied text into categorized files with timestamps.\n"
-            "Includes editor, history, search, ZIP archiving, and sound alerts."
+        show_about(self)
+
+    def show_settings(self):
+        SettingsDialog(self)
+
+    def show_entry_details(self):
+        title = os.path.basename(self.current_file_path) if self.current_file_path else "Current Editor"
+        EntryDetailsDialog(
+            self,
+            title=title,
+            path=self.current_file_path or "",
+            content=self.editor_panel.get_text(),
         )
 
     # ---------- CLOSE ----------

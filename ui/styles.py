@@ -38,6 +38,12 @@ MENU_OPTIONS = {
     "tearoff": 0,
 }
 
+DIALOG_GEOMETRIES = {
+    "search_results": "600x400",
+    "settings": "420x220",
+    "entry_details": "520x260",
+}
+
 
 def apply_window_style(root: tk.Tk) -> None:
     """Apply title, geometry, background, and ttk dark theme to the root window."""
