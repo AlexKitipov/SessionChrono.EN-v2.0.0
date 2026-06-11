@@ -124,6 +124,8 @@ class SessionChronoUI(tk.Tk):
             self.on_history_select,
             self.clear_history,
             self.show_selected_entry_details,
+            self.open_selected_history_folder,
+            self.copy_selected_history_path,
         )
         self.history_component.grid(row=1, column=0, sticky="nsew")
         self.history_list = self.history_component.listbox
@@ -179,6 +181,67 @@ class SessionChronoUI(tk.Tk):
             self.sound.play("open")
         except Exception as e:
             logger.exception("Failed to open history item: %s", item.path)
+            self.status_var.set(f"Error: {e}")
+            self.sound.play("error")
+
+
+    def selected_history_item(self):
+        """Return the currently selected history entry, if any."""
+
+        idx = self.history_component.selected_index()
+        if idx is None:
+            self.status_var.set("No history entry selected.")
+            self.sound.play("error")
+            return None
+        item = self.controller.history_entry_at(idx)
+        if item is None:
+            self.status_var.set("No history entry selected.")
+            self.sound.play("error")
+        return item
+
+    def open_selected_history_folder(self):
+        """Open the folder containing the selected history entry."""
+
+        item = self.selected_history_item()
+        if item is None:
+            return
+        self.open_containing_folder(item.path)
+
+    def copy_selected_history_path(self):
+        """Copy the selected history entry path to the clipboard."""
+
+        item = self.selected_history_item()
+        if item is None:
+            return
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(item.path)
+            self.status_var.set("Copied entry path to clipboard.")
+            self.sound.play("save")
+        except Exception as e:
+            logger.exception("Failed to copy history path: %s", item.path)
+            self.status_var.set(f"Error: {e}")
+            self.sound.play("error")
+
+    def open_containing_folder(self, path: str):
+        """Open the containing folder for *path*, even if the file is missing."""
+
+        try:
+            folder = os.path.dirname(path) if path else str(self.controller.notes_dir)
+            if not folder:
+                folder = str(self.controller.notes_dir)
+            os.makedirs(folder, exist_ok=True)
+            if sys.platform.startswith("win"):
+                os.startfile(folder)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+            logger.info("Opened containing folder: %s", folder)
+            self.status_var.set("Opened containing folder.")
+            self.sound.play("open")
+        except Exception as e:
+            logger.exception("Failed to open containing folder for: %s", path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 

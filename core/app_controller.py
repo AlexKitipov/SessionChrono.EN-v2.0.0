@@ -38,11 +38,18 @@ class ClipboardEntry:
     category: str
     folder: str
     metadata_id: str | None = None
+    created_at: str | None = None
 
     def as_history_item(self) -> dict[str, str]:
         """Return the legacy mapping shape consumed by the history list widget."""
 
-        return {"title": self.title, "path": self.path, "text": self.text}
+        return {
+            "title": self.title,
+            "path": self.path,
+            "text": self.text,
+            "category": self.category,
+            "created_at": self.created_at or "",
+        }
 
 
 class ClipboardMonitorProtocol(Protocol):
@@ -230,6 +237,7 @@ class ApplicationController:
                 category=category,
                 folder=folder,
                 metadata_id=metadata.entry_id,
+                created_at=metadata.created_at,
             )
             with self._lock:
                 self._last_record_path = saved_path
