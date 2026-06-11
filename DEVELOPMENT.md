@@ -12,7 +12,7 @@ source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py --paths
-python -m unittest discover -s tests
+python -m pytest
 ```
 
 Start the app:
@@ -94,8 +94,8 @@ main.py               CLI entry point and Tkinter startup
 6. Run:
 
 ```bash
-python -m unittest tests.test_classifier
-python -m unittest discover -s tests
+python -m pytest tests/test_classifier.py
+python -m pytest
 ```
 
 Classifier rules should be deterministic, defensive, and safe for empty, very large, or binary-like clipboard text.
@@ -163,20 +163,23 @@ Data-directory changes should preserve user data. Use migration/copy behavior ra
 Full suite:
 
 ```bash
-python -m unittest discover -s tests
+python -m pytest
 ```
 
 Targeted suites:
 
 ```bash
-python -m unittest tests.test_app_controller
-python -m unittest tests.test_classifier
-python -m unittest tests.test_export
-python -m unittest tests.test_metadata
-python -m unittest tests.test_search
-python -m unittest tests.test_settings
-python -m unittest tests.test_storage
+python -m pytest tests/test_app_controller.py
+python -m pytest tests/test_classifier.py
+python -m pytest tests/test_export.py
+python -m pytest tests/test_import_smoke.py
+python -m pytest tests/test_metadata.py
+python -m pytest tests/test_search.py
+python -m pytest tests/test_settings.py
+python -m pytest tests/test_storage.py
 ```
+
+The pytest configuration routes default SessionChrono runtime paths to a disposable temporary directory during collection, so import-time logging and fallback persistence never create repository or user `ChronoNotes/`, `metadata/`, `settings/`, or `exports/` content.
 
 Path smoke checks:
 
