@@ -1,2 +1,23 @@
-# SessionChrono.EN-v2.0.0
-SessionChrono v2.0.0 is a modular, enhanced clipboard‑logging tool with smart text classification, improved UI, structured daily notes, and fast background capture. Built for creators and developers who need clean, organized, timestamped logs with zero effort. The next‑gen evolution of SessionChrono.
+# SessionChrono – Modular Clipboard Notepad (Tkinter Edition)
+
+SessionChrono is a smart clipboard‑logging notepad that automatically saves copied text into categorized files.  
+This version is fully modular, lightweight, and optimized for local use with Tkinter.
+
+---
+
+## ✨ Features
+
+- Automatic clipboard monitoring  
+- Categorized auto‑saving (URL, CODE, TODO, CHAT, LOG, NOTE)  
+- Built‑in text editor  
+- Clipboard history panel  
+- Last copied preview  
+- Search inside logs  
+- ZIP archiving of daily notes  
+- Sound alerts (WAV or fallback beep)  
+- Clean modular architecture  
+- Works fully offline  
+
+---
+
+## 📁 Project Structure
