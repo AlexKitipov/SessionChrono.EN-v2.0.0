@@ -38,7 +38,7 @@ Useful non-GUI smoke checks:
 ```bash
 python main.py --paths
 python -m core.config
-python -m unittest discover -s tests
+python -m pytest
 ```
 
 For complete install and packaging instructions, see [`INSTALLATION.md`](INSTALLATION.md). For contributor workflows, see [`DEVELOPMENT.md`](DEVELOPMENT.md). For release steps, see [`DEPLOY.md`](DEPLOY.md).
@@ -189,20 +189,23 @@ The legacy **Tools → Create ZIP of Today** action remains available and uses t
 Run the full test suite:
 
 ```bash
-python -m unittest discover -s tests
+python -m pytest
 ```
 
 Targeted suites:
 
 ```bash
-python -m unittest tests.test_classifier
-python -m unittest tests.test_storage
-python -m unittest tests.test_metadata
-python -m unittest tests.test_search
-python -m unittest tests.test_export
-python -m unittest tests.test_settings
-python -m unittest tests.test_app_controller
+python -m pytest tests/test_classifier.py
+python -m pytest tests/test_storage.py
+python -m pytest tests/test_metadata.py
+python -m pytest tests/test_search.py
+python -m pytest tests/test_export.py
+python -m pytest tests/test_settings.py
+python -m pytest tests/test_app_controller.py
+python -m pytest tests/test_import_smoke.py
 ```
+
+The automated suite includes import smoke checks for `main.py`, core modules, and Tkinter UI modules without starting the Tk event loop. The pytest setup isolates default runtime paths in a temporary directory so test runs do not write to real user `ChronoNotes/` folders.
 
 ---
 
