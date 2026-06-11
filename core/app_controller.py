@@ -14,13 +14,13 @@ from typing import Callable, Protocol
 
 from .chrono import ClipboardMonitor
 from .config import ensure_user_directories
+from .settings import AppSettings, load_settings, migrate_data_directory, save_settings
 from .logger import get_logger, log_shutdown, log_startup
 from .storage import (
     LoadTextResult,
     SearchResult,
     StorageManager,
     StorageOperationResult,
-    get_default_storage_manager,
 )
 from .utils import build_filename, classify_text_with_confidence
 
@@ -77,15 +77,20 @@ class ApplicationController:
         storage: StorageManager | None = None,
         monitor_factory: MonitorFactory = ClipboardMonitor,
         filename_builder: FilenameBuilder = build_filename,
-        history_limit: int = 20,
+        history_limit: int | None = None,
+        settings: AppSettings | None = None,
         on_entry_saved: EntryCallback | None = None,
         on_error: ErrorCallback | None = None,
         on_monitoring_changed: MonitoringCallback | None = None,
     ):
-        self.storage = storage or get_default_storage_manager()
+        self.settings = settings or load_settings().settings
+        self.storage = storage or StorageManager(
+            self.settings.data_directory,
+            self.settings.default_export_directory,
+        )
         self.monitor_factory = monitor_factory
         self.filename_builder = filename_builder
-        self.history_limit = history_limit
+        self.history_limit = history_limit or self.settings.max_history_entries
         self.on_entry_saved = on_entry_saved
         self.on_error = on_error
         self.on_monitoring_changed = on_monitoring_changed
@@ -135,7 +140,11 @@ class ApplicationController:
             log_startup()
             self._started = True
         logger.info("Application controller started")
-        return self.resume_monitoring()
+        if self.settings.start_monitoring_on_launch:
+            return self.resume_monitoring()
+        logger.info("Application controller started with clipboard monitoring paused by settings")
+        self._notify_monitoring_changed(False)
+        return False
 
     def shutdown(self) -> None:
         """Stop background services and write shutdown diagnostics."""
@@ -146,12 +155,53 @@ class ApplicationController:
         with self._lock:
             self._started = False
 
+    def _create_monitor(self) -> ClipboardMonitorProtocol:
+        """Create a clipboard monitor using the current polling preference."""
+
+        if self.monitor_factory is ClipboardMonitor:
+            return ClipboardMonitor(
+                self.handle_clipboard_text,
+                poll_interval=self.settings.clipboard_poll_interval,
+            )
+        monitor = self.monitor_factory(self.handle_clipboard_text)
+        if hasattr(monitor, "poll_interval"):
+            setattr(monitor, "poll_interval", self.settings.clipboard_poll_interval)
+        return monitor
+
+    def apply_settings(self, settings: AppSettings, *, migrate_data: bool = False) -> AppSettings:
+        """Persist and apply settings that affect core services."""
+
+        settings = settings.normalized()
+        old_settings = self.settings
+        old_data_dir = self.storage.base_dir
+        save_settings(settings)
+        if migrate_data and str(old_data_dir) != settings.data_directory:
+            migrate_data_directory(old_data_dir, settings.data_directory)
+
+        was_monitoring = self.monitoring_active
+        if was_monitoring:
+            self.pause_monitoring()
+
+        with self._lock:
+            self.settings = settings
+            self.history_limit = settings.max_history_entries
+            del self._history[self.history_limit :]
+            self.storage = StorageManager(settings.data_directory, settings.default_export_directory)
+            self._monitor = None
+
+        if was_monitoring or (not old_settings.start_monitoring_on_launch and settings.start_monitoring_on_launch):
+            self.resume_monitoring()
+        elif not settings.start_monitoring_on_launch:
+            self._notify_monitoring_changed(False)
+        logger.info("Applied settings")
+        return settings
+
     def resume_monitoring(self) -> bool:
         """Start the clipboard monitor if it is not already running."""
 
         with self._lock:
             if self._monitor is None:
-                self._monitor = self.monitor_factory(self.handle_clipboard_text)
+                self._monitor = self._create_monitor()
             monitor = self._monitor
             if self._monitoring_active and monitor.is_running():
                 logger.info("Clipboard monitoring resume requested while already active")

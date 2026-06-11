@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Callable, Protocol
 
 from core.config import APP_NAME, APP_VERSION
 from core.logger import get_logger
 from core.metadata import EntryMetadata
+from core.settings import AppSettings, DEFAULT_SOUND_EVENTS, SUPPORTED_THEMES
 from core.storage import SearchResult
 from ui.styles import COLOR_WINDOW_BG, DIALOG_GEOMETRIES
 from ui.widgets import SearchResultsList
@@ -225,26 +226,130 @@ class SearchDialog:
 
 
 class SettingsDialog(tk.Toplevel):
-    """Placeholder settings shell for upcoming preferences UI."""
+    """Persistent settings editor for user preferences."""
 
-    def __init__(self, parent: tk.Misc):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        settings: AppSettings,
+        on_save: Callable[[AppSettings, bool], AppSettings] | None = None,
+    ):
         super().__init__(parent)
         self.title("Settings")
         self.geometry(DIALOG_GEOMETRIES["settings"])
         self.configure(bg=COLOR_WINDOW_BG)
         self.transient(parent)
+        self.settings = settings.normalized()
+        self.on_save = on_save
+        self.start_monitoring_var = tk.BooleanVar(value=self.settings.start_monitoring_on_launch)
+        self.poll_interval_var = tk.StringVar(value=str(self.settings.clipboard_poll_interval))
+        self.history_limit_var = tk.StringVar(value=str(self.settings.max_history_entries))
+        self.sound_enabled_var = tk.BooleanVar(value=self.settings.sound_enabled)
+        self.sound_volume_var = tk.DoubleVar(value=self.settings.sound_volume)
+        self.export_dir_var = tk.StringVar(value=self.settings.default_export_directory)
+        self.data_dir_var = tk.StringVar(value=self.settings.data_directory)
+        self.migrate_data_var = tk.BooleanVar(value=False)
+        self.theme_var = tk.StringVar(value=self.settings.theme)
+        self.event_vars = {
+            event: tk.BooleanVar(value=self.settings.sound_events.get(event, True))
+            for event in DEFAULT_SOUND_EVENTS
+        }
         self._build_body()
 
     def _build_body(self) -> None:
         frame = ttk.Frame(self, padding=12)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Settings", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        ttk.Label(
+        frame.columnconfigure(1, weight=1)
+        ttk.Label(frame, text="Settings", font=("Segoe UI", 12, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 10)
+        )
+
+        ttk.Checkbutton(
             frame,
-            text="Preferences will appear here in a future update.",
-            wraplength=360,
-        ).pack(anchor="w", pady=(8, 12))
-        ttk.Button(frame, text="Close", command=self.destroy).pack(anchor="e")
+            text="Start clipboard monitoring on launch",
+            variable=self.start_monitoring_var,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=3)
+
+        ttk.Label(frame, text="Clipboard polling interval (seconds):").grid(row=2, column=0, sticky="w", pady=3)
+        ttk.Entry(frame, textvariable=self.poll_interval_var, width=10).grid(row=2, column=1, sticky="w", pady=3)
+
+        ttk.Label(frame, text="Maximum in-session history entries:").grid(row=3, column=0, sticky="w", pady=3)
+        ttk.Entry(frame, textvariable=self.history_limit_var, width=10).grid(row=3, column=1, sticky="w", pady=3)
+
+        ttk.Separator(frame).grid(row=4, column=0, columnspan=3, sticky="ew", pady=8)
+        ttk.Checkbutton(frame, text="Enable sounds", variable=self.sound_enabled_var).grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=3
+        )
+        ttk.Label(frame, text="Sound volume:").grid(row=6, column=0, sticky="w", pady=3)
+        ttk.Scale(frame, from_=0, to=100, variable=self.sound_volume_var, orient="horizontal").grid(
+            row=6, column=1, sticky="ew", pady=3
+        )
+        ttk.Label(frame, text="Event sounds:").grid(row=7, column=0, sticky="nw", pady=3)
+        events_frame = ttk.Frame(frame)
+        events_frame.grid(row=7, column=1, columnspan=2, sticky="w", pady=3)
+        for index, (event, variable) in enumerate(self.event_vars.items()):
+            ttk.Checkbutton(events_frame, text=event.title(), variable=variable).grid(
+                row=index // 3, column=index % 3, sticky="w", padx=(0, 10)
+            )
+
+        ttk.Separator(frame).grid(row=8, column=0, columnspan=3, sticky="ew", pady=8)
+        self._directory_row(frame, 9, "Default export directory:", self.export_dir_var, self.choose_export_dir)
+        self._directory_row(frame, 10, "Data directory:", self.data_dir_var, self.choose_data_dir)
+        ttk.Checkbutton(
+            frame,
+            text="Copy existing notes into the new data directory when saving",
+            variable=self.migrate_data_var,
+        ).grid(row=11, column=1, columnspan=2, sticky="w", pady=3)
+
+        ttk.Label(frame, text="Theme:").grid(row=12, column=0, sticky="w", pady=(10, 3))
+        ttk.OptionMenu(frame, self.theme_var, self.theme_var.get(), *sorted(SUPPORTED_THEMES)).grid(
+            row=12, column=1, sticky="w", pady=(10, 3)
+        )
+        ttk.Label(frame, text="Dark is the current default; this setting is reserved for future themes.").grid(
+            row=13, column=1, columnspan=2, sticky="w"
+        )
+
+        button_row = ttk.Frame(frame)
+        button_row.grid(row=14, column=1, columnspan=2, sticky="e", pady=(14, 0))
+        ttk.Button(button_row, text="Save", command=self.save).pack(side="left", padx=(0, 6))
+        ttk.Button(button_row, text="Cancel", command=self.destroy).pack(side="left")
+
+    def _directory_row(self, frame: ttk.Frame, row: int, label: str, variable: tk.StringVar, command) -> None:
+        ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", pady=3)
+        ttk.Entry(frame, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=3)
+        ttk.Button(frame, text="Browse...", command=command).grid(row=row, column=2, sticky="e", padx=(6, 0), pady=3)
+
+    def choose_export_dir(self) -> None:
+        selected = filedialog.askdirectory(parent=self, initialdir=self.export_dir_var.get() or None)
+        if selected:
+            self.export_dir_var.set(selected)
+
+    def choose_data_dir(self) -> None:
+        selected = filedialog.askdirectory(parent=self, initialdir=self.data_dir_var.get() or None)
+        if selected:
+            self.data_dir_var.set(selected)
+
+    def save(self) -> None:
+        try:
+            settings = self.settings.with_updates(
+                start_monitoring_on_launch=self.start_monitoring_var.get(),
+                clipboard_poll_interval=float(self.poll_interval_var.get()),
+                max_history_entries=int(self.history_limit_var.get()),
+                sound_enabled=self.sound_enabled_var.get(),
+                sound_volume=int(round(self.sound_volume_var.get())),
+                sound_events={event: variable.get() for event, variable in self.event_vars.items()},
+                default_export_directory=self.export_dir_var.get(),
+                data_directory=self.data_dir_var.get(),
+                theme=self.theme_var.get(),
+            )
+            if self.on_save is not None:
+                settings = self.on_save(settings, self.migrate_data_var.get())
+            self.settings = settings
+            show_info(self, "Settings", "Settings saved.")
+            self.destroy()
+        except Exception as exc:
+            logger.exception("Failed to save settings")
+            show_error(self, "Settings", f"Failed to save settings: {exc}")
 
 
 class EntryDetailsDialog(tk.Toplevel):

@@ -102,6 +102,12 @@ class ClipboardMonitor:
             logger.warning("Clipboard monitor did not stop within %.2f seconds", timeout or 0.0)
         return stopped
 
+    def update_poll_interval(self, poll_interval: float) -> None:
+        """Update the sleep interval used by the running polling loop."""
+
+        with self._lock:
+            self.poll_interval = poll_interval
+
     def is_running(self) -> bool:
         thread = self.thread
         return bool(thread and thread.is_alive() and not self.stop_event.is_set())
