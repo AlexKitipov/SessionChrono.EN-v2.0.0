@@ -33,6 +33,8 @@ APP_ROOT = FROZEN_APP_ROOT or DEV_ROOT
 RESOURCE_ROOT = BUNDLE_ROOT if IS_FROZEN else DEV_ROOT
 SOUNDS_DIR = RESOURCE_ROOT / "sounds"
 ICONS_DIR = RESOURCE_ROOT / "icons"
+CONFIG_TEMPLATES_DIR = RESOURCE_ROOT / "config_templates"
+DEFAULT_SETTINGS_TEMPLATE = CONFIG_TEMPLATES_DIR / "default_settings.json"
 
 
 def _platform_user_data_root() -> Path:
@@ -93,6 +95,8 @@ def runtime_path_report() -> dict[str, Any]:
         "resource_root": str(RESOURCE_ROOT),
         "sounds_dir": str(SOUNDS_DIR),
         "icons_dir": str(ICONS_DIR),
+        "config_templates_dir": str(CONFIG_TEMPLATES_DIR),
+        "default_settings_template": str(DEFAULT_SETTINGS_TEMPLATE),
         "user_data_root": str(USER_DATA_ROOT),
         "chrono_notes_dir": str(CHRONO_NOTES_DIR),
         "log_root": str(LOG_ROOT),

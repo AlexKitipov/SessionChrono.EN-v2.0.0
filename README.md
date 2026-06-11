@@ -41,6 +41,24 @@ python -m core.config
 python -m pytest
 ```
 
+## PyInstaller packaging
+
+Packaging is defined by the checked-in `sessionchrono.spec` file. Build scripts are intentionally source-only wrappers; they create local `build/` and `dist/` outputs that must not be committed.
+
+Windows:
+
+```bat
+build.bat
+```
+
+POSIX development validation:
+
+```bash
+./build.sh
+```
+
+Expected local output is a one-folder application at `dist/SessionChrono/`. The executable reads bundled `icons/`, `sounds/`, and `config_templates/` resources from the PyInstaller bundle while writing notes, settings, metadata, exports, and logs to the safe per-user data directory selected by `core.config`.
+
 For complete install and packaging instructions, see [`INSTALLATION.md`](INSTALLATION.md). For contributor workflows, see [`DEVELOPMENT.md`](DEVELOPMENT.md). For release steps, see [`DEPLOY.md`](DEPLOY.md).
 
 ---
@@ -86,6 +104,9 @@ SessionChrono.EN-v2.0.0/
 ├── tests/                # Unit/integration tests for core behavior
 ├── icons/                # Bundled icon resources
 ├── sounds/               # Optional bundled sound resources
+├── config_templates/     # Text default configuration templates for packaged builds
+├── sessionchrono.spec    # PyInstaller one-folder build definition
+├── build.bat / build.sh  # Clean PyInstaller build wrappers
 ├── main.py               # CLI/Tkinter entry point
 ├── requirements.txt      # Runtime Python dependencies
 ├── INSTALLATION.md       # User install and packaging guide
@@ -138,7 +159,7 @@ When running from a checkout, SessionChrono writes beside the repository so loca
 | Settings | `settings/settings.json` |
 | Metadata sidecars | `metadata/*.json` |
 | Exports | `exports/` |
-| Resources | `icons/`, `sounds/` |
+| Resources | `icons/`, `sounds/`, `config_templates/` |
 
 ### Frozen/PyInstaller runs
 

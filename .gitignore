@@ -1,0 +1,37 @@
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# SessionChrono runtime data created by source runs
+ChronoNotes/
+settings/
+metadata/
+exports/
+
+# PyInstaller outputs and binary release artifacts
+build/
+dist/
+*.exe
+*.dll
+*.pyd
+*.so
+*.dylib
+*.bin
+*.manifest
+*.toc
+*.pkg
+
+# Local OS/editor files
+.DS_Store
+Thumbs.db
+*.swp
