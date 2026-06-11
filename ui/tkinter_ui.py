@@ -1,11 +1,21 @@
 import os
+import subprocess
 import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from core.chrono import ClipboardMonitor
+from core.config import (
+    APP_NAME,
+    APP_VERSION,
+    LOG_ROOT,
+    SOUNDS_DIR,
+    WINDOW_DEFAULT_GEOMETRY,
+    WINDOW_TITLE,
+    ensure_user_directories,
+)
 from core.storage import save_text, load_text, create_today_zip, search_logs
-from core.utils import build_filename, LOG_ROOT
+from core.utils import build_filename
 
 # ---------- SOUND MANAGER ----------
 try:
@@ -13,8 +23,6 @@ try:
     HAS_WINSOUND = True
 except ImportError:
     HAS_WINSOUND = False
-
-SOUNDS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sounds")
 
 SOUND_FILES = {
     "start":  "start.wav",
@@ -48,11 +56,11 @@ class SoundManager:
         if HAS_WINSOUND:
             wav_name = SOUND_FILES.get(event)
             if wav_name:
-                wav_path = os.path.join(SOUNDS_DIR, wav_name)
-                if os.path.exists(wav_path):
+                wav_path = SOUNDS_DIR / wav_name
+                if wav_path.exists():
                     try:
                         winsound.PlaySound(
-                            wav_path,
+                            str(wav_path),
                             winsound.SND_FILENAME | winsound.SND_ASYNC
                         )
                         return
@@ -135,8 +143,9 @@ class RightClickMenu:
 class SessionChronoUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("SessionChrono Notepad Smart Full Edition")
-        self.geometry("1100x700")
+        ensure_user_directories()
+        self.title(WINDOW_TITLE)
+        self.geometry(WINDOW_DEFAULT_GEOMETRY)
         self.configure(bg="#2d2d2d")
 
         self.sound = SoundManager(self)
@@ -468,12 +477,13 @@ class SessionChronoUI(tk.Tk):
 
     def open_logs_folder(self):
         try:
+            LOG_ROOT.mkdir(parents=True, exist_ok=True)
             if sys.platform.startswith("win"):
-                os.startfile(LOG_ROOT)
+                os.startfile(str(LOG_ROOT))
             elif sys.platform == "darwin":
-                os.system(f"open '{LOG_ROOT}'")
+                subprocess.Popen(["open", str(LOG_ROOT)])
             else:
-                os.system(f"xdg-open '{LOG_ROOT}'")
+                subprocess.Popen(["xdg-open", str(LOG_ROOT)])
             self.status_var.set("Opened logs folder.")
             self.sound.play("open")
         except Exception as e:
@@ -557,7 +567,7 @@ class SessionChronoUI(tk.Tk):
     def show_about(self):
         messagebox.showinfo(
             "About SessionChrono",
-            "SessionChrono – Smart clipboard-logging notepad\n"
+            f"{APP_NAME} {APP_VERSION} – Smart clipboard-logging notepad\n"
             "Automatically saves copied text into categorized files with timestamps.\n"
             "Includes editor, history, search, ZIP archiving, and sound alerts."
         )
