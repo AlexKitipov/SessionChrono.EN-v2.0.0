@@ -7,7 +7,7 @@ import os
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -233,11 +233,24 @@ class MetadataManager:
         records.sort(key=lambda item: item.created_at, reverse=True)
         return records
 
-    def search(self, query: str = "", *, tags: Iterable[str] | None = None) -> list[MetadataSearchResult]:
-        """Search metadata fields by free text and/or required tags."""
+    def search(
+        self,
+        query: str = "",
+        *,
+        tags: Iterable[str] | None = None,
+        category: str | None = None,
+        date_from: date | datetime | str | None = None,
+        date_to: date | datetime | str | None = None,
+        filename: str | None = None,
+    ) -> list[MetadataSearchResult]:
+        """Search metadata fields with optional tags, category, date, and filename filters."""
 
         normalized_query = query.strip().casefold()
         required_tags = {tag.strip().casefold() for tag in tags or [] if tag.strip()}
+        normalized_category = (category or "").strip().casefold()
+        normalized_filename = (filename or "").strip().casefold()
+        start_dt = self._coerce_search_datetime(date_from, end_of_day=False)
+        end_dt = self._coerce_search_datetime(date_to, end_of_day=True)
         results: list[MetadataSearchResult] = []
         for metadata in self.list_all():
             fields = {
@@ -252,17 +265,66 @@ class MetadataManager:
             tag_set = {tag.casefold() for tag in metadata.user_tags}
             if required_tags and not required_tags.issubset(tag_set):
                 continue
+            if normalized_category and metadata.category.casefold() != normalized_category:
+                continue
+            if normalized_filename:
+                file_name = Path(metadata.file_path).name.casefold()
+                if normalized_filename not in file_name and normalized_filename not in metadata.title.casefold():
+                    continue
+            created_at = self._parse_datetime(metadata.created_at)
+            if start_dt and (created_at is None or created_at < start_dt):
+                continue
+            if end_dt and (created_at is None or created_at > end_dt):
+                continue
             matched_fields = tuple(
                 name for name, value in fields.items() if normalized_query and normalized_query in value.casefold()
             )
             if normalized_query and not matched_fields:
                 continue
-            if not normalized_query and required_tags:
-                matched_fields = ("user_tags",)
-            if not normalized_query and not required_tags:
-                matched_fields = ()
+            filter_fields = []
+            if required_tags:
+                filter_fields.append("user_tags")
+            if normalized_category:
+                filter_fields.append("category")
+            if normalized_filename:
+                filter_fields.append("file_path")
+            if (start_dt or end_dt):
+                filter_fields.append("created_at")
+            if not normalized_query:
+                matched_fields = tuple(filter_fields)
             results.append(MetadataSearchResult(metadata, matched_fields))
         return results
+
+    @staticmethod
+    def _coerce_search_datetime(value: date | datetime | str | None, *, end_of_day: bool) -> datetime | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None)
+        if isinstance(value, date):
+            return datetime.combine(value, time.max if end_of_day else time.min)
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return datetime.combine(date.fromisoformat(text), time.max if end_of_day else time.min)
+        except ValueError:
+            parsed = MetadataManager._parse_datetime(text)
+            if parsed is None:
+                raise ValueError(f"Invalid metadata search date: {value!r}. Use YYYY-MM-DD.")
+            return parsed
+
+    @staticmethod
+    def _parse_datetime(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
 
     def _path_for_id(self, entry_id: str) -> Path:
         safe_id = "".join(ch for ch in str(entry_id) if ch.isalnum() or ch in "-_") or uuid.uuid4().hex

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 from typing import Callable, Protocol
 
 from core.config import APP_NAME, APP_VERSION
@@ -20,8 +20,8 @@ logger = get_logger()
 class SearchProvider(Protocol):
     """Protocol for storage objects that can search and load note text."""
 
-    def search_logs(self, query: str) -> list[SearchResult]:
-        """Return structured note search results for *query*."""
+    def search_logs(self, query: str = "", **filters) -> list[SearchResult]:
+        """Return structured note search results for *query* and filters."""
 
     def load_text(self, path: str):
         """Load note text from *path*."""
@@ -72,53 +72,129 @@ class SearchDialog:
         self.matches: list[SearchResult] = []
         self.window: tk.Toplevel | None = None
         self.results_list: SearchResultsList | None = None
+        self.query_var: tk.StringVar | None = None
+        self.category_var: tk.StringVar | None = None
+        self.date_from_var: tk.StringVar | None = None
+        self.date_to_var: tk.StringVar | None = None
+        self.tag_var: tk.StringVar | None = None
+        self.filename_var: tk.StringVar | None = None
+        self.summary_var: tk.StringVar | None = None
 
     def show(self) -> None:
-        """Prompt the user and open a result window when matches are found."""
+        """Open a searchable dialog with structured filter controls."""
 
-        query = simpledialog.askstring("Search Logs", "Enter text:", parent=self.parent)
-        if not query:
+        self._build_results_window("")
+
+    def run_search(self) -> None:
+        """Execute the current search form and refresh the results list."""
+
+        if self.results_list is None:
             return
-
+        query = self.query_var.get().strip() if self.query_var else ""
+        filters = {
+            "category": self.category_var.get().strip() if self.category_var else "",
+            "date_from": self.date_from_var.get().strip() if self.date_from_var else "",
+            "date_to": self.date_to_var.get().strip() if self.date_to_var else "",
+            "tag": self.tag_var.get().strip() if self.tag_var else "",
+            "filename": self.filename_var.get().strip() if self.filename_var else "",
+        }
         try:
-            self.matches = self.storage.search_logs(query)
+            self.matches = self.storage.search_logs(query, **filters)
         except Exception as exc:
-            logger.exception("Search failed for query: %r", query)
+            logger.exception("Search failed for query: %r filters=%s", query, filters)
             self._report_error(f"Search failed: {exc}")
             return
 
-        if not self.matches:
-            show_info(self.parent, "Search Logs", "No matches found.")
-            return
-
-        logger.info("Search dialog found %d match(es) for query: %r", len(self.matches), query)
-        self._build_results_window(query)
+        self.results_list.set_results(self.matches)
+        if self.summary_var is not None:
+            self.summary_var.set(f"{len(self.matches)} match(es) found.")
+        if self.matches:
+            self.results_list.selection_clear(0, tk.END)
+            self.results_list.selection_set(0)
+            self.results_list.activate(0)
+        logger.info("Search dialog found %d match(es)", len(self.matches))
 
     def _build_results_window(self, query: str) -> None:
         self.window = tk.Toplevel(self.parent)
-        self.window.title(f"Search Results — {query}")
+        self.window.title("Search Logs")
         self.window.geometry(DIALOG_GEOMETRIES["search_results"])
         self.window.configure(bg=COLOR_WINDOW_BG)
         self.window.transient(self.parent)
 
+        self.query_var = tk.StringVar(value=query)
+        self.category_var = tk.StringVar()
+        self.date_from_var = tk.StringVar()
+        self.date_to_var = tk.StringVar()
+        self.tag_var = tk.StringVar()
+        self.filename_var = tk.StringVar()
+        self.summary_var = tk.StringVar(value="Enter filters, then choose Search.")
+
         frame = ttk.Frame(self.window)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
-        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(2, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        ttk.Label(frame, text="Double-click a result to open it.").grid(row=0, column=0, sticky="w", pady=(0, 6))
+        filters = ttk.LabelFrame(frame, text="Filters", padding=8)
+        filters.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        for column in range(6):
+            filters.columnconfigure(column, weight=1)
+
+        ttk.Label(filters, text="Text").grid(row=0, column=0, sticky="w")
+        text_entry = ttk.Entry(filters, textvariable=self.query_var)
+        text_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 6), pady=(0, 6))
+        text_entry.bind("<Return>", lambda _event: self.run_search())
+
+        ttk.Label(filters, text="Category").grid(row=0, column=2, sticky="w")
+        ttk.Entry(filters, textvariable=self.category_var).grid(row=1, column=2, sticky="ew", padx=(0, 6), pady=(0, 6))
+
+        ttk.Label(filters, text="Tag").grid(row=0, column=3, sticky="w")
+        ttk.Entry(filters, textvariable=self.tag_var).grid(row=1, column=3, sticky="ew", padx=(0, 6), pady=(0, 6))
+
+        ttk.Label(filters, text="Filename / title").grid(row=0, column=4, columnspan=2, sticky="w")
+        ttk.Entry(filters, textvariable=self.filename_var).grid(row=1, column=4, columnspan=2, sticky="ew", pady=(0, 6))
+
+        ttk.Label(filters, text="From date (YYYY-MM-DD)").grid(row=2, column=0, columnspan=2, sticky="w")
+        ttk.Entry(filters, textvariable=self.date_from_var).grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 6))
+
+        ttk.Label(filters, text="To date (YYYY-MM-DD)").grid(row=2, column=2, columnspan=2, sticky="w")
+        ttk.Entry(filters, textvariable=self.date_to_var).grid(row=3, column=2, columnspan=2, sticky="ew", padx=(0, 6))
+
+        ttk.Button(filters, text="Search", command=self.run_search).grid(row=3, column=4, sticky="ew", padx=(0, 6))
+        ttk.Button(filters, text="Clear", command=self.clear_filters).grid(row=3, column=5, sticky="ew")
+
+        ttk.Label(frame, textvariable=self.summary_var).grid(row=1, column=0, sticky="w", pady=(0, 6))
 
         self.results_list = SearchResultsList(frame)
-        self.results_list.grid(row=1, column=0, sticky="nsew")
+        self.results_list.grid(row=2, column=0, sticky="nsew")
         self.results_list.set_results(self.matches)
         self.results_list.bind("<Double-Button-1>", self.open_selected)
         self.results_list.bind("<Return>", self.open_selected)
         self.results_list.focus_set()
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=2, column=0, sticky="e", pady=(8, 0))
+        button_row.grid(row=3, column=0, sticky="e", pady=(8, 0))
         ttk.Button(button_row, text="Open", command=self.open_selected).pack(side="left", padx=(0, 6))
         ttk.Button(button_row, text="Close", command=self.window.destroy).pack(side="left")
+        text_entry.focus_set()
+
+    def clear_filters(self) -> None:
+        """Clear all search controls and current results."""
+
+        for variable in (
+            self.query_var,
+            self.category_var,
+            self.date_from_var,
+            self.date_to_var,
+            self.tag_var,
+            self.filename_var,
+        ):
+            if variable is not None:
+                variable.set("")
+        self.matches = []
+        if self.results_list is not None:
+            self.results_list.set_results([])
+        if self.summary_var is not None:
+            self.summary_var.set("Enter filters, then choose Search.")
 
     def open_selected(self, _event: tk.Event | None = None) -> None:
         """Load the selected match and pass its content to the owner."""

@@ -12,7 +12,7 @@ This version is fully modular, lightweight, and optimized for local use with Tki
 - Built-in text editor
 - Clipboard history panel
 - Last copied preview
-- Search inside logs
+- Search inside logs with text, category, date, tag, and filename/title filters
 - JSON sidecar metadata with entry IDs, categories, titles, classifier confidence, tags, and annotations
 - ZIP archiving of daily notes
 - Persistent daily application logs for diagnostics
@@ -42,6 +42,8 @@ SessionChrono.EN-v2.0.0/
 ├── tests/
 │   ├── test_app_controller.py
 │   ├── test_classifier.py
+│   ├── test_metadata.py
+│   ├── test_search.py
 │   └── test_storage.py
 ├── ui/
 │   ├── __init__.py
@@ -128,7 +130,7 @@ The Tkinter application is split into reusable UI foundation modules while prese
 - `ui/styles.py` centralizes dark theme colors, fonts, menu styling, dialog geometry, and ttk theme setup.
 - `ui/widgets.py` provides low-level reusable controls such as scrollable text panes, clipboard history lists, status bars, search result lists, and the right-click context menu for copy/cut/paste/select-all/clear.
 - `ui/components.py` composes higher-level main-window sections, including the editor panel, last-copied preview, clipboard history panel, and a reusable action strip for future toolbar work.
-- `ui/dialogs.py` owns pop-up UI flows for About, log search prompt/results, settings, entry details, and parented info/error message helpers.
+- `ui/dialogs.py` owns pop-up UI flows for About, filtered log search/results, settings, entry details, and parented info/error message helpers.
 - `ui/sounds.py` owns sound playback and keeps the same optional WAV behavior: if a bundled WAV file exists under the configured `sounds/` resource directory it is used on Windows, otherwise the app falls back to a winsound beep or Tk bell without crashing.
 - `ui/tkinter_ui.py` keeps `SessionChronoUI` as the main application shell and composes the shared styles, components, dialogs, widgets, and sound manager.
 
@@ -157,7 +159,7 @@ Storage operations now:
 - Return structured success/failure result objects from `StorageManager` methods instead of relying on uncaught file exceptions.
 - Treat missing or unreadable loads as clear failed results with empty content.
 - Build daily ZIP archives with archive members relative to the notes root, such as `YYYY-MM-DD/NOTE/example.txt`.
-- Return structured search results with absolute paths, relative paths, matched line numbers, snippets, filenames, and modification timestamps.
+- Return structured search results with absolute paths, relative paths, matched line numbers, snippets, filenames, modification timestamps, categories, creation timestamps, tags, and safe missing-file availability flags.
 - Provide export hook methods for future JSON, CSV, and Markdown integrations (`export_json()`, `export_csv()`, and `export_markdown()`).
 
 To run the storage integration tests against temporary directories:
@@ -167,6 +169,27 @@ python -m unittest tests.test_storage
 ```
 
 ---
+
+
+## 🔎 Filtered history search
+
+The **Search Logs** dialog (`Ctrl+F`) supports practical filters that can be combined in one search:
+
+- Full-text query across note bodies plus metadata title, short title, tags, and annotations.
+- Category filter, such as `NOTE`, `URL`, `CODE`, or any classifier category folder.
+- Date range filters using `YYYY-MM-DD` values against metadata creation timestamps.
+- Tag filter for user tags maintained in the Entry Details dialog.
+- Filename/title filter for matching either the saved text filename or the metadata title.
+
+Search results show category, timestamp, tags, and a clear `(missing file)` marker when a metadata sidecar still matches but the original text file is unavailable. Missing files are never opened blindly; attempts to open one return a concise error while keeping the result visible so users understand what happened.
+
+The clipboard history panel now displays each entry with its category and timestamp. Selected history entries also provide **Open Folder** and **Copy Path** actions for quickly locating the underlying saved note or sharing its filesystem path.
+
+To run the filtered search tests:
+
+```bash
+python -m unittest tests.test_search
+```
 
 ## 🏷️ Entry metadata and tagging
 

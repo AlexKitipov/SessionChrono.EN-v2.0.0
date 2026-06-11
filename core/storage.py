@@ -11,13 +11,13 @@ import os
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Callable
 
 from .config import EXPORTS_DIR, LOG_ROOT, METADATA_DIR
 from .logger import get_logger
-from .metadata import MetadataManager
+from .metadata import EntryMetadata, MetadataManager
 
 logger = get_logger()
 
@@ -50,6 +50,18 @@ class LoadTextResult:
 
 
 @dataclass(frozen=True)
+class SearchFilters:
+    """Structured filters for note and metadata search."""
+
+    query: str = ""
+    category: str | None = None
+    date_from: date | datetime | str | None = None
+    date_to: date | datetime | str | None = None
+    tag: str | None = None
+    filename: str | None = None
+
+
+@dataclass(frozen=True)
 class SearchResult:
     """Structured note search result."""
 
@@ -59,6 +71,12 @@ class SearchResult:
     snippet: str
     line_number: int
     modified_at: str | None = None
+    category: str | None = None
+    created_at: str | None = None
+    title: str | None = None
+    tags: tuple[str, ...] = ()
+    file_exists: bool = True
+    file_readable: bool = True
 
 
 Exporter = Callable[[Path, Path], StorageOperationResult]
@@ -173,51 +191,263 @@ class StorageManager:
             logger.exception("Failed to create ZIP archive: %s", zip_path)
             return StorageOperationResult(False, str(zip_path), "Failed to create ZIP archive.", str(exc))
 
-    def search_logs(self, query: str) -> list[SearchResult]:
-        """Search text notes and return structured results with snippets."""
+    def search_logs(
+        self,
+        query: str = "",
+        *,
+        category: str | None = None,
+        date_from: date | datetime | str | None = None,
+        date_to: date | datetime | str | None = None,
+        tag: str | None = None,
+        filename: str | None = None,
+    ) -> list[SearchResult]:
+        """Search notes by text and structured metadata filters."""
 
-        logger.info("Searching notes for query: %r", query)
-        normalized_query = query.casefold()
-        if not normalized_query:
-            logger.info("Search skipped because query was empty")
-            return []
+        filters = SearchFilters(query, category, date_from, date_to, tag, filename)
+        logger.info("Searching notes with filters: %s", filters)
+        normalized_query = query.strip().casefold()
+        normalized_filename = (filename or "").strip().casefold()
+        normalized_category = (category or "").strip().casefold()
+        normalized_tag = (tag or "").strip().casefold()
+        start_dt = self._coerce_search_datetime(date_from, end_of_day=False)
+        end_dt = self._coerce_search_datetime(date_to, end_of_day=True)
 
-        matches: list[SearchResult] = []
-        if not self.base_dir.exists():
-            logger.info("Search base directory does not exist: %s", self.base_dir)
-            return matches
+        matches: dict[str, SearchResult] = {}
+        metadata_by_path = {
+            str(Path(record.file_path).expanduser().resolve()): record
+            for record in self.metadata.list_all()
+        }
 
-        for full_path in sorted(self.base_dir.rglob("*.txt")):
-            if not full_path.is_file():
-                continue
-            try:
-                content = full_path.read_text(encoding="utf-8")
-            except Exception:
-                logger.exception("Failed to search file: %s", full_path)
-                continue
-            line_number, snippet = self._first_match_snippet(content, normalized_query)
-            if line_number is None:
-                continue
-            try:
-                relative_path = full_path.relative_to(self.base_dir).as_posix()
-            except ValueError:
-                relative_path = full_path.name
-            try:
-                modified_at = datetime.fromtimestamp(full_path.stat().st_mtime).isoformat(timespec="seconds")
-            except OSError:
-                modified_at = None
-            matches.append(
-                SearchResult(
-                    path=str(full_path),
-                    relative_path=relative_path,
-                    filename=full_path.name,
-                    snippet=snippet,
-                    line_number=line_number,
-                    modified_at=modified_at,
+        if self.base_dir.exists():
+            for full_path in sorted(self.base_dir.rglob("*.txt")):
+                if not full_path.is_file():
+                    continue
+                metadata = metadata_by_path.get(str(full_path.resolve()))
+                result = self._search_file(
+                    full_path,
+                    metadata,
+                    normalized_query,
+                    normalized_filename,
+                    normalized_category,
+                    normalized_tag,
+                    start_dt,
+                    end_dt,
                 )
+                if result is not None:
+                    matches[result.path] = result
+        else:
+            logger.info("Search base directory does not exist: %s", self.base_dir)
+
+        # Metadata records with missing text files can still match structured filters
+        # or metadata text (title, tags, notes). Include them safely as unavailable.
+        for metadata in metadata_by_path.values():
+            if metadata.file_readable and metadata.file_path in matches:
+                continue
+            metadata_path = Path(metadata.file_path).expanduser()
+            if metadata_path.exists() and metadata.file_readable:
+                continue
+            result = self._search_missing_metadata(
+                metadata,
+                normalized_query,
+                normalized_filename,
+                normalized_category,
+                normalized_tag,
+                start_dt,
+                end_dt,
             )
-        logger.info("Search completed for query %r with %d match(es)", query, len(matches))
-        return matches
+            if result is not None:
+                matches[result.path] = result
+
+        results = sorted(
+            matches.values(),
+            key=lambda item: item.created_at or item.modified_at or item.relative_path,
+            reverse=True,
+        )
+        logger.info("Search completed with %d match(es)", len(results))
+        return results
+
+    def _search_file(
+        self,
+        full_path: Path,
+        metadata: EntryMetadata | None,
+        normalized_query: str,
+        normalized_filename: str,
+        normalized_category: str,
+        normalized_tag: str,
+        start_dt: datetime | None,
+        end_dt: datetime | None,
+    ) -> SearchResult | None:
+        if not self._metadata_matches(metadata, normalized_category, normalized_tag, start_dt, end_dt):
+            return None
+        title = metadata.title if metadata else ""
+        if normalized_filename and normalized_filename not in full_path.name.casefold() and normalized_filename not in title.casefold():
+            return None
+        try:
+            content = full_path.read_text(encoding="utf-8")
+        except Exception:
+            logger.exception("Failed to search file: %s", full_path)
+            return None
+        line_number, snippet = self._content_or_metadata_snippet(content, metadata, normalized_query)
+        if normalized_query and line_number is None:
+            return None
+        if line_number is None:
+            line_number = 1
+            snippet = self._fallback_snippet(content, metadata)
+        try:
+            relative_path = full_path.relative_to(self.base_dir).as_posix()
+        except ValueError:
+            relative_path = full_path.name
+        try:
+            modified_at = datetime.fromtimestamp(full_path.stat().st_mtime).isoformat(timespec="seconds")
+        except OSError:
+            modified_at = None
+        return SearchResult(
+            path=str(full_path),
+            relative_path=relative_path,
+            filename=full_path.name,
+            snippet=snippet,
+            line_number=line_number,
+            modified_at=modified_at,
+            category=metadata.category if metadata else self._category_from_path(full_path),
+            created_at=metadata.created_at if metadata else None,
+            title=metadata.title if metadata else full_path.stem,
+            tags=tuple(metadata.user_tags) if metadata else (),
+            file_exists=True,
+            file_readable=True,
+        )
+
+    def _search_missing_metadata(
+        self,
+        metadata: EntryMetadata,
+        normalized_query: str,
+        normalized_filename: str,
+        normalized_category: str,
+        normalized_tag: str,
+        start_dt: datetime | None,
+        end_dt: datetime | None,
+    ) -> SearchResult | None:
+        if not self._metadata_matches(metadata, normalized_category, normalized_tag, start_dt, end_dt):
+            return None
+        path = Path(metadata.file_path).expanduser()
+        if normalized_filename and normalized_filename not in path.name.casefold() and normalized_filename not in metadata.title.casefold():
+            return None
+        metadata_text = " ".join([metadata.title, metadata.short_title, metadata.note, " ".join(metadata.user_tags)])
+        if normalized_query and normalized_query not in metadata_text.casefold():
+            return None
+        try:
+            relative_path = path.resolve().relative_to(self.base_dir).as_posix()
+        except Exception:
+            relative_path = path.name
+        return SearchResult(
+            path=str(path),
+            relative_path=relative_path,
+            filename=path.name,
+            snippet="Missing file — metadata matched." if normalized_query else "Missing file.",
+            line_number=0,
+            modified_at=None,
+            category=metadata.category,
+            created_at=metadata.created_at,
+            title=metadata.title,
+            tags=tuple(metadata.user_tags),
+            file_exists=metadata.file_exists,
+            file_readable=metadata.file_readable,
+        )
+
+    @staticmethod
+    def _metadata_matches(
+        metadata: EntryMetadata | None,
+        normalized_category: str,
+        normalized_tag: str,
+        start_dt: datetime | None,
+        end_dt: datetime | None,
+    ) -> bool:
+        if normalized_category:
+            if metadata is None or metadata.category.casefold() != normalized_category:
+                return False
+        if normalized_tag:
+            if metadata is None or normalized_tag not in {tag.casefold() for tag in metadata.user_tags}:
+                return False
+        if start_dt or end_dt:
+            if metadata is None:
+                return False
+            created_at = StorageManager._parse_datetime(metadata.created_at)
+            if created_at is None:
+                return False
+            if start_dt and created_at < start_dt:
+                return False
+            if end_dt and created_at > end_dt:
+                return False
+        return True
+
+    @staticmethod
+    def _content_or_metadata_snippet(
+        content: str,
+        metadata: EntryMetadata | None,
+        normalized_query: str,
+    ) -> tuple[int | None, str]:
+        if not normalized_query:
+            return None, ""
+        line_number, snippet = StorageManager._first_match_snippet(content, normalized_query)
+        if line_number is not None:
+            return line_number, snippet
+        if metadata is not None:
+            fields = [metadata.title, metadata.short_title, metadata.note, " ".join(metadata.user_tags)]
+            for value in fields:
+                if normalized_query in value.casefold():
+                    snippet = value.strip()
+                    if len(snippet) > 160:
+                        snippet = f"{snippet[:157]}..."
+                    return 0, snippet
+        return None, ""
+
+    @staticmethod
+    def _fallback_snippet(content: str, metadata: EntryMetadata | None) -> str:
+        if metadata and metadata.title:
+            return metadata.title
+        first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
+        return first_line[:160] if first_line else "(empty file)"
+
+    @staticmethod
+    def _category_from_path(path: Path) -> str | None:
+        try:
+            return path.parent.name
+        except Exception:
+            return None
+
+    @staticmethod
+    def _coerce_search_datetime(value: date | datetime | str | None, *, end_of_day: bool) -> datetime | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None)
+        if isinstance(value, date):
+            boundary = time.max if end_of_day else time.min
+            return datetime.combine(value, boundary)
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            parsed_date = date.fromisoformat(text)
+            boundary = time.max if end_of_day else time.min
+            return datetime.combine(parsed_date, boundary)
+        except ValueError:
+            parsed_dt = StorageManager._parse_datetime(text)
+            if parsed_dt is None:
+                raise ValueError(f"Invalid search date: {value!r}. Use YYYY-MM-DD.")
+            return parsed_dt
+
+    @staticmethod
+    def _parse_datetime(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        normalized = value.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
 
     @staticmethod
     def _first_match_snippet(content: str, normalized_query: str) -> tuple[int | None, str]:
@@ -280,10 +510,10 @@ class StorageManager:
 
         return self.metadata.update_metadata(entry_id, **fields)
 
-    def search_metadata(self, query: str = "", *, tags=None):
-        """Search entry metadata fields and tags."""
+    def search_metadata(self, query: str = "", **filters):
+        """Search entry metadata fields and structured filters."""
 
-        return self.metadata.search(query, tags=tags)
+        return self.metadata.search(query, **filters)
 
 
 _default_manager = StorageManager(LOG_ROOT, EXPORTS_DIR)
@@ -318,10 +548,10 @@ def create_today_zip() -> str | None:
     return result.path if result.success else None
 
 
-def search_log_results(query: str) -> list[SearchResult]:
+def search_log_results(query: str, **filters) -> list[SearchResult]:
     """Return structured search results from the default storage manager."""
 
-    return _default_manager.search_logs(query)
+    return _default_manager.search_logs(query, **filters)
 
 
 def search_logs(query: str) -> list[str]:

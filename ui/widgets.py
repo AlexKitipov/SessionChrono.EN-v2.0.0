@@ -142,7 +142,13 @@ class ClipboardHistoryList(tk.Frame):
     def set_items(self, items: Iterable[Mapping[str, str]]) -> None:
         self.listbox.delete(0, tk.END)
         for item in items:
-            self.listbox.insert(tk.END, item["title"])
+            title = item.get("title", "Untitled")
+            category = item.get("category", "NOTE")
+            timestamp = item.get("created_at") or item.get("timestamp") or ""
+            display = f"[{category}] {title}"
+            if timestamp:
+                display = f"{timestamp}  {display}"
+            self.listbox.insert(tk.END, display)
 
     def curselection(self) -> tuple[int, ...]:
         return self.listbox.curselection()
@@ -182,7 +188,12 @@ class SearchResultsList(tk.Listbox):
 
         self.delete(0, tk.END)
         for result in results:
+            category = f"[{result.category}] " if result.category else ""
+            timestamp = f"{result.created_at or result.modified_at}  " if (result.created_at or result.modified_at) else ""
+            tags = f"  tags: {', '.join(result.tags)}" if result.tags else ""
+            availability = "  (missing file)" if not result.file_readable else ""
+            line = result.line_number if result.line_number else "metadata"
             self.insert(
                 tk.END,
-                f"{result.relative_path}:{result.line_number} — {result.snippet}",
+                f"{timestamp}{category}{result.relative_path}:{line} — {result.snippet}{tags}{availability}",
             )
