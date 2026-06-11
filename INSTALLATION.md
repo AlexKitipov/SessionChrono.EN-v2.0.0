@@ -130,22 +130,31 @@ exports/
 
 ## Inno Setup installer
 
-The Windows installer should wrap the PyInstaller one-folder output. A release installer is expected to:
+The Windows installer wraps the PyInstaller one-folder output using `installer/SessionChrono.iss`. The script configures SessionChrono v2.0.0 metadata, uses `LICENSE` as the installer license page, installs the contents of `dist/SessionChrono/`, creates Start Menu shortcuts, offers an optional desktop shortcut task, registers an uninstaller, and writes the setup executable to `dist/installer/SessionChrono-2.0.0-Setup.exe`.
 
-- install the application under a normal program directory such as `{autopf}\SessionChrono`;
-- include all files from `dist/SessionChrono/`;
-- create Start Menu shortcuts;
-- optionally create a desktop shortcut;
-- register an uninstaller;
-- avoid writing default user data into the installation directory.
-
-Typical build flow after PyInstaller succeeds:
+Install Inno Setup 6 on a Windows build machine, then run from the repository root:
 
 ```powershell
-iscc installer\SessionChrono.iss
+python -m pip install -r requirements.txt
+python -m PyInstaller --clean --noconfirm sessionchrono.spec
+ISCC.exe installer\SessionChrono.iss
 ```
 
-If the installer script has a different path after packaging work lands, update this guide and `DEPLOY.md` together.
+If `ISCC.exe` is not on `PATH`, call it by full path, for example:
+
+```powershell
+& "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" installer\SessionChrono.iss
+```
+
+Expected installer artifact:
+
+```text
+dist\installer\SessionChrono-2.0.0-Setup.exe
+```
+
+The installer defaults to `{autopf}\SessionChrono`, which maps to the appropriate Program Files directory for the target Windows installation. It does not create default user data in the installation directory; frozen SessionChrono runs write notes, logs, settings, metadata, and exports under `%APPDATA%\SessionChrono\`.
+
+See `installer/README.md` for the clean Windows VM smoke-test checklist.
 
 ---
 

@@ -105,18 +105,23 @@ python -m PyInstaller --clean --noconfirm sessionchrono.spec
 
 After the PyInstaller one-folder build is verified:
 
-- [ ] Confirm the Inno Setup script points at `dist/SessionChrono/`.
-- [ ] Confirm installer metadata, version, publisher, icon, and output filename are correct.
-- [ ] Build the installer:
+- [ ] Confirm `installer/SessionChrono.iss` points at `dist/SessionChrono/`.
+- [ ] Confirm installer metadata is correct: app name `SessionChrono`, version `2.0.0`, publisher, license file, icon, default install directory, and output filename `SessionChrono-2.0.0-Setup.exe`.
+- [ ] Confirm Inno Setup 6 is installed and `ISCC.exe` is available on `PATH`, or note the full local path to `ISCC.exe`.
+- [ ] Build the installer from the repository root:
 
 ```powershell
-iscc installer\SessionChrono.iss
+ISCC.exe installer\SessionChrono.iss
 ```
 
+- [ ] Confirm the generated installer exists at `dist/installer/SessionChrono-2.0.0-Setup.exe`.
 - [ ] Install on a clean Windows test machine or VM.
+- [ ] Confirm the license page is shown.
 - [ ] Confirm Start Menu shortcut works.
 - [ ] Confirm optional desktop shortcut works if enabled.
+- [ ] Confirm Windows Settings or Control Panel shows an uninstall entry.
 - [ ] Confirm uninstall removes program files and shortcuts but preserves `%APPDATA%\SessionChrono\` user data.
+- [ ] Confirm the preserved data behavior is included in release notes.
 
 ---
 
