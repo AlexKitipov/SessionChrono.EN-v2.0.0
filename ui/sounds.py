@@ -8,6 +8,7 @@ import tkinter as tk
 
 from core.config import SOUNDS_DIR
 from core.logger import get_logger
+from core.settings import AppSettings
 
 logger = get_logger()
 
@@ -42,10 +43,22 @@ BEEP_PATTERNS = {
 class SoundManager:
     """Play optional WAV sounds with winsound and Tk bell fallbacks."""
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, settings: AppSettings | None = None):
         self.root = root
+        self.settings = settings or AppSettings.defaults()
+
+    def apply_settings(self, settings: AppSettings) -> None:
+        """Update playback preferences without recreating the manager."""
+
+        self.settings = settings.normalized()
 
     def play(self, event: str) -> None:
+        if not self.settings.sound_enabled or self.settings.sound_volume <= 0:
+            logger.info("Sound disabled; skipping event %s", event)
+            return
+        if not self.settings.sound_events.get(event, True):
+            logger.info("Sound event disabled; skipping event %s", event)
+            return
         if event not in BEEP_PATTERNS:
             logger.warning("Unknown sound event requested: %s", event)
             return

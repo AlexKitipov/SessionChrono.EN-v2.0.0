@@ -25,7 +25,7 @@ class SessionChronoUI(tk.Tk):
             on_entry_saved=self.schedule_clipboard_entry_render,
             on_error=self.schedule_controller_error,
         )
-        self.sound = SoundManager(self)
+        self.sound = SoundManager(self, self.controller.settings)
         self.status_var = tk.StringVar()
         self.current_file_path = None
 
@@ -35,7 +35,10 @@ class SessionChronoUI(tk.Tk):
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        self.status_var.set("Starting clipboard monitoring...")
+        if self.controller.settings.start_monitoring_on_launch:
+            self.status_var.set("Starting clipboard monitoring...")
+        else:
+            self.status_var.set("Clipboard monitoring is paused by settings.")
         self.sound.play("start")
 
         self.controller.start()
@@ -418,7 +421,13 @@ class SessionChronoUI(tk.Tk):
         show_about(self)
 
     def show_settings(self):
-        SettingsDialog(self)
+        SettingsDialog(self, self.controller.settings, self.apply_settings)
+
+    def apply_settings(self, settings, migrate_data: bool = False):
+        applied = self.controller.apply_settings(settings, migrate_data=migrate_data)
+        self.sound.apply_settings(applied)
+        self.status_var.set("Settings saved.")
+        return applied
 
     def show_selected_entry_details(self):
         idx = self.history_component.selected_index()

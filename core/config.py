@@ -56,6 +56,7 @@ USER_DATA_ROOT = _platform_user_data_root() if IS_FROZEN else DEV_ROOT
 CHRONO_NOTES_DIR = USER_DATA_ROOT / "ChronoNotes"
 LOG_ROOT = CHRONO_NOTES_DIR
 SETTINGS_DIR = USER_DATA_ROOT / "settings"
+SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 METADATA_DIR = USER_DATA_ROOT / "metadata"
 EXPORTS_DIR = USER_DATA_ROOT / "exports"
 
@@ -96,6 +97,7 @@ def runtime_path_report() -> dict[str, Any]:
         "chrono_notes_dir": str(CHRONO_NOTES_DIR),
         "log_root": str(LOG_ROOT),
         "settings_dir": str(SETTINGS_DIR),
+        "settings_file": str(SETTINGS_FILE),
         "metadata_dir": str(METADATA_DIR),
         "exports_dir": str(EXPORTS_DIR),
     }

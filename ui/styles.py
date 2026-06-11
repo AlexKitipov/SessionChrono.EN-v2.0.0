@@ -40,7 +40,7 @@ MENU_OPTIONS = {
 
 DIALOG_GEOMETRIES = {
     "search_results": "600x400",
-    "settings": "420x220",
+    "settings": "680x520",
     "entry_details": "520x260",
 }
 

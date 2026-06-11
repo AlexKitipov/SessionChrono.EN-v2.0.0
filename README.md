@@ -151,6 +151,29 @@ The main Tkinter window registers common shortcuts for desktop workflows:
 
 ---
 
+
+## ⚙️ Persistent settings
+
+Use **Tools → Settings** to edit production preferences without changing code. Settings are saved as a user-writable JSON file in the resolved settings directory (`settings/settings.json` during source runs, or the per-user application data directory in PyInstaller/frozen builds). The app falls back to safe defaults if the file is missing or malformed.
+
+Configurable preferences include:
+
+- Start clipboard monitoring automatically on launch.
+- Clipboard polling interval.
+- Maximum number of in-session history entries.
+- Sound enablement, volume preference, and individual event toggles.
+- Default export directory used by export actions.
+- ChronoNotes data directory, with an optional safe copy/migration control that copies existing notes to the new directory without deleting originals.
+- A reserved theme option that keeps the current dark theme as the default.
+
+To run the settings persistence tests:
+
+```bash
+python -m unittest tests.test_settings
+```
+
+---
+
 ## 💾 Storage manager
 
 `core/storage.py` exposes a `StorageManager` class that owns note persistence below a configurable base directory. The Tkinter UI uses the default manager today, while compatibility wrappers such as `save_text()`, `load_text()`, `create_today_zip()`, and `search_logs()` remain available for older callers during the UI refactor.
