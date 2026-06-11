@@ -4,11 +4,8 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog
 
-from core.chrono import ClipboardMonitor
-from core.config import ensure_user_directories
-from core.logger import APP_LOG_DIR, get_logger, log_shutdown, log_startup
-from core.storage import get_default_storage_manager
-from core.utils import build_filename
+from core.app_controller import ApplicationController, ClipboardEntry
+from core.logger import APP_LOG_DIR, get_logger
 from ui.sounds import SoundManager
 from ui.components import ClipboardHistoryPanel, EditorPanel, LastCopiedPanel
 from ui.dialogs import EntryDetailsDialog, SearchDialog, SettingsDialog, show_about
@@ -22,17 +19,15 @@ logger = get_logger()
 class SessionChronoUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        ensure_user_directories()
-        log_startup()
         apply_window_style(self)
 
-        self.storage = get_default_storage_manager()
+        self.controller = ApplicationController(
+            on_entry_saved=self.schedule_clipboard_entry_render,
+            on_error=self.schedule_controller_error,
+        )
         self.sound = SoundManager(self)
         self.status_var = tk.StringVar()
         self.current_file_path = None
-        self.last_record_path = None
-        self.history = []
-        self.logging_active = True
 
         self._build_menu()
         self._build_layout()
@@ -43,9 +38,7 @@ class SessionChronoUI(tk.Tk):
         self.status_var.set("Starting clipboard monitoring...")
         self.sound.play("start")
 
-        # Clipboard monitor
-        self.monitor = ClipboardMonitor(self.handle_new_clipboard_item)
-        self.monitor.start()
+        self.controller.start()
         logger.info("SessionChrono UI initialized; application logs are stored in %s", APP_LOG_DIR)
 
     # ---------- DARK MENU ----------
@@ -147,65 +140,56 @@ class SessionChronoUI(tk.Tk):
         self.bind_all("<Control-p>", lambda _event: self.toggle_logging())
 
     # ---------- CLIPBOARD EVENT ----------
-    def handle_new_clipboard_item(self, text: str):
-        try:
-            path, folder, short, category = build_filename(text, self.storage.base_dir)
-            result = self.storage.save_text(path, text)
-            if not result.success:
-                raise RuntimeError(result.error or result.message)
-            self.last_record_path = result.path or path
+    def schedule_clipboard_entry_render(self, entry: ClipboardEntry):
+        self.after(0, lambda: self.render_clipboard_entry(entry))
 
-            item_title = f"[{category}] {short}"
-            self.history.insert(0, {"title": item_title, "path": path, "text": text})
-            self.history = self.history[:20]
+    def schedule_controller_error(self, message: str, error: Exception):
+        self.after(0, lambda: self.report_controller_error(message, error))
 
-            self.refresh_history()
+    def render_clipboard_entry(self, entry: ClipboardEntry):
+        self.refresh_history()
+        self.last_clip_panel.set_text(entry.text)
+        self.status_var.set(f"Saved clipboard: {entry.title}")
+        self.sound.play("copy")
 
-            self.last_clip_panel.set_text(text)
-
-            self.status_var.set(f"Saved clipboard: {item_title}")
-            self.sound.play("copy")
-        except Exception as e:
-            logger.exception("Failed to handle clipboard item")
-            self.status_var.set(f"Error: {e}")
-            self.sound.play("error")
+    def report_controller_error(self, message: str, error: Exception):
+        self.status_var.set(f"{message}: {error}")
+        self.sound.play("error")
 
     def refresh_history(self):
-        self.history_component.set_items(self.history)
+        self.history_component.set_items(self.controller.history_items)
 
     # ---------- HISTORY ----------
     def on_history_select(self, _event):
-        sel = self.history_list.curselection()
-        if not sel:
+        idx = self.history_component.selected_index()
+        if idx is None:
             return
-        idx = sel[0]
-        item = self.history[idx]
+        item = self.controller.history_entry_at(idx)
+        if item is None:
+            return
 
         try:
-            result = self.storage.load_text(item["path"])
+            result = self.controller.load_text(item.path)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
-            content = result.content
-            self.editor.delete("1.0", tk.END)
-            self.editor.insert("1.0", content)
-            self.current_file_path = item["path"]
-            self.status_var.set(f"Opened: {os.path.basename(item['path'])}")
+            self.editor_panel.set_text(result.content)
+            self.current_file_path = item.path
+            self.status_var.set(f"Opened: {os.path.basename(item.path)}")
             self.sound.play("open")
         except Exception as e:
-            logger.exception("Failed to open history item: %s", item["path"])
+            logger.exception("Failed to open history item: %s", item.path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
     def clear_history(self):
-        logger.info("Clearing in-memory clipboard history containing %d item(s)", len(self.history))
-        self.history.clear()
+        self.controller.clear_history()
         self.refresh_history()
         self.status_var.set("Session history cleared.")
 
     # ---------- FILE OPS ----------
     def new_file(self):
         logger.info("Creating new editor document")
-        self.editor.delete("1.0", tk.END)
+        self.editor_panel.clear()
         self.current_file_path = None
         self.status_var.set("New file.")
         self.sound.play("open")
@@ -218,12 +202,11 @@ class SessionChronoUI(tk.Tk):
         if not path:
             return
         try:
-            result = self.storage.load_text(path)
+            result = self.controller.load_text(path)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
             content = result.content
-            self.editor.delete("1.0", tk.END)
-            self.editor.insert("1.0", content)
+            self.editor_panel.set_text(content)
             self.current_file_path = path
             self.status_var.set(f"Opened: {os.path.basename(path)}")
             self.sound.play("open")
@@ -236,8 +219,8 @@ class SessionChronoUI(tk.Tk):
         if not self.current_file_path:
             return self.save_file_as()
         try:
-            content = self.editor.get("1.0", tk.END)
-            result = self.storage.save_text(self.current_file_path, content)
+            content = self.editor_panel.get_text()
+            result = self.controller.save_text(self.current_file_path, content)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
             self.status_var.set(f"Saved: {os.path.basename(self.current_file_path)}")
@@ -256,8 +239,8 @@ class SessionChronoUI(tk.Tk):
         if not path:
             return
         try:
-            content = self.editor.get("1.0", tk.END)
-            result = self.storage.save_text(path, content)
+            content = self.editor_panel.get_text()
+            result = self.controller.save_text(path, content)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
             self.current_file_path = path
@@ -270,31 +253,17 @@ class SessionChronoUI(tk.Tk):
 
     # ---------- TOOLS ----------
     def toggle_logging(self):
-        # Важно: да не стартираме монитор-а многократно
-        self.logging_active = not self.logging_active
-
-        logger.info("Clipboard monitoring toggled; active=%s", self.logging_active)
-
-        if self.logging_active:
-            try:
-                self.monitor.start()
-            except RuntimeError:
-                logger.exception("Clipboard monitor could not be resumed")
-            logger.info("Clipboard monitoring resumed")
+        active = self.controller.toggle_monitoring()
+        if active:
             self.status_var.set("Clipboard monitoring resumed.")
             self.sound.play("resume")
         else:
-            try:
-                self.monitor.stop()
-            except Exception:
-                logger.exception("Clipboard monitor could not be paused")
-            logger.info("Clipboard monitoring paused")
             self.status_var.set("Clipboard monitoring paused.")
             self.sound.play("pause")
 
     def open_logs_folder(self):
         try:
-            notes_dir = self.storage.base_dir
+            notes_dir = self.controller.notes_dir
             notes_dir.mkdir(parents=True, exist_ok=True)
             if sys.platform.startswith("win"):
                 os.startfile(str(notes_dir))
@@ -306,33 +275,32 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set("Opened logs folder.")
             self.sound.play("open")
         except Exception as e:
-            logger.exception("Failed to open notes folder: %s", self.storage.base_dir)
+            logger.exception("Failed to open notes folder: %s", self.controller.notes_dir)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
     def open_last_record(self):
-        if not self.last_record_path or not os.path.exists(self.last_record_path):
+        last_record_path = self.controller.last_record_path
+        if not last_record_path or not os.path.exists(last_record_path):
             self.status_var.set("No last auto-note.")
             self.sound.play("error")
             return
         try:
-            result = self.storage.load_text(self.last_record_path)
+            result = self.controller.load_text(last_record_path)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
-            content = result.content
-            self.editor.delete("1.0", tk.END)
-            self.editor.insert("1.0", content)
-            self.current_file_path = self.last_record_path
+            self.editor_panel.set_text(result.content)
+            self.current_file_path = last_record_path
             self.status_var.set("Opened last auto-note.")
             self.sound.play("open")
         except Exception as e:
-            logger.exception("Failed to open last auto-note: %s", self.last_record_path)
+            logger.exception("Failed to open last auto-note: %s", last_record_path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
     def create_zip(self):
         try:
-            zip_result = self.storage.create_today_zip()
+            zip_result = self.controller.create_today_zip()
             zip_path = zip_result.path
             if not zip_result.success or not zip_path:
                 self.status_var.set("No logs for today.")
@@ -349,7 +317,7 @@ class SessionChronoUI(tk.Tk):
     def search_logs_ui(self):
         dialog = SearchDialog(
             self,
-            self.storage,
+            self.controller.storage,
             self.open_search_result,
             self.report_dialog_error,
         )
@@ -384,10 +352,9 @@ class SessionChronoUI(tk.Tk):
     # ---------- CLOSE ----------
     def on_close(self):
         try:
-            self.monitor.stop()
+            self.controller.shutdown()
         except Exception:
-            logger.exception("Failed to stop clipboard monitor during shutdown")
-        log_shutdown()
+            logger.exception("Failed to shut down application controller")
         self.destroy()
 
 

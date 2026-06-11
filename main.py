@@ -1,9 +1,11 @@
+"""Source and PyInstaller entry point for SessionChrono."""
+
 import argparse
 
 from core.config import print_runtime_path_report
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="SessionChrono clipboard notepad")
     parser.add_argument(
         "--paths",
