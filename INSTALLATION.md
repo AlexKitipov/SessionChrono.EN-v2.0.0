@@ -6,7 +6,7 @@ This guide covers three ways to run SessionChrono v2.0.0:
 2. portable executable produced with PyInstaller;
 3. Windows installer produced with Inno Setup.
 
-> Packaging scripts/spec files may be added by a later packaging PR. Until then, treat the PyInstaller and Inno Setup sections as the release contract that build automation should satisfy.
+> This repository contains only source packaging inputs. Do not commit PyInstaller outputs such as `build/`, `dist/`, `.exe`, `.dll`, `.pyd`, bytecode, manifests, or cache files.
 
 ---
 
@@ -18,7 +18,8 @@ This guide covers three ways to run SessionChrono v2.0.0:
 - Tkinter must be available in the Python installation.
 - Runtime dependencies from `requirements.txt`:
   - `pyperclip` on all platforms;
-  - `pywin32` on Windows only.
+  - `pywin32` on Windows only;
+  - `pyinstaller` for maintainers creating portable builds.
 
 ### Portable executable and installer runs
 
@@ -69,17 +70,24 @@ These generated directories are user data. Back them up before deleting a checko
 
 ## Portable executable
 
-A portable build should be created with PyInstaller from the repository root. If no project-specific `.spec` file exists yet, this command is a suitable starting point for a one-folder Windows build:
+A portable build is created with PyInstaller from the repository root using the checked-in `sessionchrono.spec` file. The spec defines the application name (`SessionChrono`), one-folder layout, GUI/windowed mode, Windows icon, Windows version metadata from `version_info.txt`, data-resource bundling, and explicit hidden imports for clipboard, Tkinter, Windows clipboard support, and project modules.
 
-```bash
-python -m pip install pyinstaller
-python -m PyInstaller --noconfirm --windowed --name SessionChrono --icon SessionChrono.ico --add-data "icons;icons" --add-data "sounds;sounds" main.py
+Windows build:
+
+```bat
+build.bat
 ```
 
-On macOS/Linux, PyInstaller uses `:` instead of `;` in `--add-data` values:
+POSIX development-validation build:
 
 ```bash
-python -m PyInstaller --noconfirm --windowed --name SessionChrono --add-data "icons:icons" --add-data "sounds:sounds" main.py
+./build.sh
+```
+
+Equivalent direct command:
+
+```bash
+python -m PyInstaller --clean --noconfirm sessionchrono.spec
 ```
 
 Expected one-folder artifact:
@@ -88,9 +96,17 @@ Expected one-folder artifact:
 dist/SessionChrono/
 ├── SessionChrono.exe      # Windows name; platform-specific on macOS/Linux
 └── _internal/             # PyInstaller runtime files and bundled resources
+    ├── icons/
+    ├── sounds/
+    └── config_templates/
 ```
 
-Run the executable from `dist/SessionChrono/`. Do not store user data inside the executable folder; frozen builds write to the per-user data root described below.
+Run the executable from `dist/SessionChrono/`. Before distributing, smoke-test `python main.py --paths` in source mode and the generated executable in frozen mode to verify `core.config` resolves bundled resources and per-user writable data paths correctly. Do not store user data inside the executable folder; frozen builds write to the per-user data root described below.
+
+
+### Build artifact policy
+
+The executable, runtime libraries, compiled extension modules, PyInstaller manifests, bytecode, and all `build/` or `dist/` contents are generated artifacts. They belong in local release workspaces or GitHub release uploads only, never in source-control commits.
 
 ### Portable-build data locations
 
@@ -158,6 +174,16 @@ python -m tkinter
 ```
 
 If that fails, install a Python distribution that includes Tkinter.
+
+### PyInstaller is not installed
+
+Install dependencies in the active environment:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Then rerun `build.bat` or `./build.sh`.
 
 ### Clipboard monitoring does not capture text
 

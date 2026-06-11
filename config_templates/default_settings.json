@@ -1,0 +1,19 @@
+{
+  "clipboard_poll_interval": 0.25,
+  "data_directory": "",
+  "default_export_directory": "",
+  "max_history_entries": 20,
+  "sound_enabled": true,
+  "sound_events": {
+    "copy": true,
+    "error": true,
+    "open": true,
+    "pause": true,
+    "resume": true,
+    "save": true,
+    "start": true
+  },
+  "sound_volume": 100,
+  "start_monitoring_on_launch": true,
+  "theme": "dark"
+}

@@ -13,6 +13,9 @@ Use this checklist when preparing a v2.0.0 release. It is designed for source va
   - `SessionChrono.ico`
   - `icons/`
   - `sounds/`
+  - `config_templates/default_settings.json`
+  - `sessionchrono.spec`
+  - `version_info.txt`
 - [ ] Run:
 
 ```bash
@@ -61,38 +64,38 @@ On Windows PowerShell:
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 ```
 
-Do not delete user data directories (`ChronoNotes/`, `settings/`, `metadata/`, `exports/`) unless intentionally testing a first-run scenario and backups are not needed.
+Do not delete user data directories (`ChronoNotes/`, `settings/`, `metadata/`, `exports/`) unless intentionally testing a first-run scenario and backups are not needed. Do not commit any regenerated `build/` or `dist/` content.
 
 ---
 
 ## 4. PyInstaller build
 
-Install PyInstaller in the build environment:
+Install PyInstaller in the build environment through the project requirements:
 
 ```bash
-python -m pip install pyinstaller
+python -m pip install -r requirements.txt
 ```
 
-If a project `.spec` file exists after packaging work lands, prefer it:
+Run the source-controlled build wrapper for the current platform. Windows:
+
+```bat
+build.bat
+```
+
+POSIX development validation:
 
 ```bash
-python -m PyInstaller --noconfirm SessionChrono.spec
+./build.sh
 ```
 
-If no `.spec` file exists, use a direct command. Windows one-folder example:
+Equivalent direct command for CI or manual troubleshooting:
 
 ```bash
-python -m PyInstaller --noconfirm --windowed --name SessionChrono --icon SessionChrono.ico --add-data "icons;icons" --add-data "sounds;sounds" main.py
+python -m PyInstaller --clean --noconfirm sessionchrono.spec
 ```
 
-macOS/Linux one-folder example:
-
-```bash
-python -m PyInstaller --noconfirm --windowed --name SessionChrono --add-data "icons:icons" --add-data "sounds:sounds" main.py
-```
-
-- [ ] Confirm `dist/SessionChrono/` exists.
-- [ ] Confirm bundled resources are present in the generated output.
+- [ ] Confirm `dist/SessionChrono/` exists locally.
+- [ ] Confirm bundled resources are present in the generated output: `icons/`, `sounds/`, and `config_templates/`.
 - [ ] Launch the executable.
 - [ ] Confirm frozen user data is written to the per-user application data root, not the executable directory.
 
@@ -134,6 +137,7 @@ Run this smoke test against both source and packaged builds when possible:
 - [ ] Open **Tools → Settings**, change a non-destructive preference, save, restart, and confirm persistence.
 - [ ] Close the window and confirm no lingering app process remains.
 - [ ] Inspect the daily application log for unexpected tracebacks.
+- [ ] Confirm `git status --short` does not show `build/`, `dist/`, `.exe`, `.dll`, `.pyd`, `.pyc`, `.manifest`, or PyInstaller cache files.
 
 ---
 
@@ -153,6 +157,8 @@ git push origin v2.0.0
   - portable ZIP of `dist/SessionChrono/`;
   - Windows installer executable;
   - checksums file if produced.
+
+Generated binaries are attached to the GitHub release only; they are not committed to the repository.
 - [ ] Paste release highlights from `CHANGELOG.md`.
 - [ ] Include data-location and uninstall notes in the release body.
 
