@@ -123,6 +123,7 @@ class SessionChronoUI(tk.Tk):
             right_frame,
             self.on_history_select,
             self.clear_history,
+            self.show_selected_entry_details,
         )
         self.history_component.grid(row=1, column=0, sticky="nsew")
         self.history_list = self.history_component.listbox
@@ -340,14 +341,36 @@ class SessionChronoUI(tk.Tk):
     def show_settings(self):
         SettingsDialog(self)
 
+    def show_selected_entry_details(self):
+        idx = self.history_component.selected_index()
+        if idx is None:
+            return self.show_entry_details()
+        item = self.controller.history_entry_at(idx)
+        if item is None:
+            return self.show_entry_details()
+        self.current_file_path = item.path
+        self.editor_panel.set_text(item.text)
+        return self.show_entry_details()
+
     def show_entry_details(self):
         title = os.path.basename(self.current_file_path) if self.current_file_path else "Current Editor"
+        metadata = None
+        if self.current_file_path:
+            metadata = self.controller.load_metadata_by_path(self.current_file_path)
         EntryDetailsDialog(
             self,
             title=title,
             path=self.current_file_path or "",
             content=self.editor_panel.get_text(),
+            metadata=metadata,
+            on_save=self.save_entry_metadata,
         )
+
+    def save_entry_metadata(self, metadata, tags: list[str], note: str):
+        updated = self.controller.update_metadata(metadata.entry_id, user_tags=tags, note=note)
+        self.status_var.set("Entry metadata saved.")
+        self.sound.play("save")
+        return updated
 
     # ---------- CLOSE ----------
     def on_close(self):

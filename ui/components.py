@@ -55,6 +55,7 @@ class ClipboardHistoryPanel(ttk.Frame):
         parent: tk.Misc,
         on_select: Callable[[tk.Event], None],
         on_clear: Callable[[], None],
+        on_details: Callable[[], None] | None = None,
     ):
         super().__init__(parent)
         self.rowconfigure(1, weight=1)
@@ -67,11 +68,21 @@ class ClipboardHistoryPanel(ttk.Frame):
         )
         self.history_list = ClipboardHistoryList(self, on_select)
         self.history_list.grid(row=1, column=0, sticky="nsew")
-        ttk.Button(self, text="Clear Session History", command=on_clear).grid(
-            row=2,
+        button_row = ttk.Frame(self)
+        button_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        button_row.columnconfigure(0, weight=1)
+        button_row.columnconfigure(1, weight=1)
+        ttk.Button(button_row, text="Clear Session History", command=on_clear).grid(
+            row=0,
             column=0,
             sticky="ew",
-            pady=(10, 0),
+            padx=(0, 4),
+        )
+        ttk.Button(button_row, text="Entry Details", command=on_details or (lambda: None)).grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(4, 0),
         )
         self.listbox = self.history_list.listbox
 

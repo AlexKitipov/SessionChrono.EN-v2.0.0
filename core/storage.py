@@ -15,8 +15,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Callable
 
-from .config import EXPORTS_DIR, LOG_ROOT
+from .config import EXPORTS_DIR, LOG_ROOT, METADATA_DIR
 from .logger import get_logger
+from .metadata import MetadataManager
 
 logger = get_logger()
 
@@ -75,6 +76,12 @@ class StorageManager:
         default_exports = self.base_dir.parent / "exports"
         self.exports_dir = Path(exports_dir).expanduser().resolve() if exports_dir else default_exports
         self._exporters: dict[str, Exporter] = {}
+        default_metadata_dir = (
+            Path(METADATA_DIR)
+            if self.base_dir == Path(LOG_ROOT).expanduser().resolve()
+            else self.base_dir.parent / "metadata"
+        )
+        self.metadata = MetadataManager(default_metadata_dir)
 
     def resolve_path(self, path: str | os.PathLike[str]) -> Path:
         """Resolve absolute paths as-is and relative paths under ``base_dir``."""
@@ -257,6 +264,26 @@ class StorageManager:
 
     def export_markdown(self, destination: str | os.PathLike[str] | None = None) -> StorageOperationResult:
         return self.export_notes("markdown", destination)
+
+    def load_metadata(self, entry_id: str):
+        """Load entry metadata by ID."""
+
+        return self.metadata.load(entry_id)
+
+    def load_metadata_by_path(self, path: str | os.PathLike[str]):
+        """Load entry metadata for a text path."""
+
+        return self.metadata.load_by_path(path)
+
+    def update_metadata(self, entry_id: str, **fields):
+        """Update entry metadata fields."""
+
+        return self.metadata.update_metadata(entry_id, **fields)
+
+    def search_metadata(self, query: str = "", *, tags=None):
+        """Search entry metadata fields and tags."""
+
+        return self.metadata.search(query, tags=tags)
 
 
 _default_manager = StorageManager(LOG_ROOT, EXPORTS_DIR)
