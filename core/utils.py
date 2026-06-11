@@ -1,9 +1,6 @@
-import os
 from datetime import datetime
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_ROOT = os.path.join(os.path.dirname(BASE_DIR), "ChronoNotes")
-os.makedirs(LOG_ROOT, exist_ok=True)
+from .config import LOG_ROOT
 
 def classify_text(text: str) -> str:
     t = text.strip().lower()
@@ -38,9 +35,9 @@ def build_filename(text: str):
     category = classify_text(text)
     short = make_short_title(text)
 
-    folder = os.path.join(LOG_ROOT, date_str, category)
-    os.makedirs(folder, exist_ok=True)
+    folder = LOG_ROOT / date_str / category
+    folder.mkdir(parents=True, exist_ok=True)
 
     filename = f"{category}_{short}_{date_str}_{time_str}.txt"
-    full_path = os.path.join(folder, filename)
-    return full_path, folder, short, category
+    full_path = folder / filename
+    return str(full_path), str(folder), short, category
