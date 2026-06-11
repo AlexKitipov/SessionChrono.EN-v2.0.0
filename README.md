@@ -59,6 +59,17 @@ POSIX development validation:
 
 Expected local output is a one-folder application at `dist/SessionChrono/`. The executable reads bundled `icons/`, `sounds/`, and `config_templates/` resources from the PyInstaller bundle while writing notes, settings, metadata, exports, and logs to the safe per-user data directory selected by `core.config`.
 
+## Windows installer packaging
+
+The Windows installer is defined by [`installer/SessionChrono.iss`](installer/SessionChrono.iss) and should be built only after the PyInstaller one-folder output exists. On a Windows build machine with Inno Setup 6 installed, run:
+
+```powershell
+python -m PyInstaller --clean --noconfirm sessionchrono.spec
+ISCC.exe installer\SessionChrono.iss
+```
+
+The installer output is `dist/installer/SessionChrono-2.0.0-Setup.exe`. It installs the application under `Program Files`, adds Start Menu shortcuts, offers an optional desktop shortcut, and registers a standard uninstaller. Uninstall removes installed binaries and shortcuts while preserving `%APPDATA%\SessionChrono\` user data such as `ChronoNotes/`, settings, metadata, exports, and logs.
+
 For complete install and packaging instructions, see [`INSTALLATION.md`](INSTALLATION.md). For contributor workflows, see [`DEVELOPMENT.md`](DEVELOPMENT.md). For release steps, see [`DEPLOY.md`](DEPLOY.md).
 
 ---
@@ -105,6 +116,7 @@ SessionChrono.EN-v2.0.0/
 ├── icons/                # Bundled icon resources
 ├── sounds/               # Optional bundled sound resources
 ├── config_templates/     # Text default configuration templates for packaged builds
+├── installer/            # Inno Setup script and Windows installer smoke checklist
 ├── sessionchrono.spec    # PyInstaller one-folder build definition
 ├── build.bat / build.sh  # Clean PyInstaller build wrappers
 ├── main.py               # CLI/Tkinter entry point
@@ -232,7 +244,8 @@ The automated suite includes import smoke checks for `main.py`, core modules, an
 
 ## Documentation set
 
-- [`INSTALLATION.md`](INSTALLATION.md): source install, portable executable usage, Inno Setup installer expectations, and uninstall behavior.
+- [`INSTALLATION.md`](INSTALLATION.md): source install, portable executable usage, Inno Setup build instructions, and uninstall behavior.
+- [`installer/README.md`](installer/README.md): Windows installer build flow and clean-VM smoke-test checklist.
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): project structure, boundaries, adding categories/export formats/UI, and tests.
 - [`DEPLOY.md`](DEPLOY.md): release checklist for version checks, clean builds, PyInstaller, installer creation, smoke tests, tags, and GitHub releases.
 - [`CHANGELOG.md`](CHANGELOG.md): v2.0.0 release-note skeleton.
