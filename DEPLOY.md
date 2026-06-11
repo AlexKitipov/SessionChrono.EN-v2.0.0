@@ -1,6 +1,6 @@
 # SessionChrono Deployment Checklist
 
-Use this checklist when preparing a v2.0.0 release. It is designed for source validation first, then PyInstaller packaging, then optional Windows installer creation.
+Use this checklist when preparing a v2.0.0 release. It is designed for source validation first, then PyInstaller packaging, then optional Windows installer creation. Source-only release-candidate PRs must not include generated binaries or build folders; create those artifacts only in the local release packaging environment after the source diff is clean.
 
 ---
 
@@ -9,10 +9,10 @@ Use this checklist when preparing a v2.0.0 release. It is designed for source va
 - [ ] Confirm the release version in `core/config.py` is correct.
 - [ ] Confirm the About dialog displays the same version.
 - [ ] Confirm README, installation guide, development guide, deploy checklist, and changelog mention the intended release.
-- [ ] Confirm package icon/resource files are present:
-  - `SessionChrono.ico`
-  - `icons/`
-  - `sounds/`
+- [ ] Confirm package resource and metadata files are present:
+  - `SessionChrono.ico` for local Windows builds when approved as a source asset
+  - `icons/README.md` and optional approved icon source files
+  - `sounds/README.md` and optional approved sound source files
   - `config_templates/default_settings.json`
   - `sessionchrono.spec`
   - `version_info.txt`
@@ -45,7 +45,7 @@ python -m pip install -r requirements.txt
 - [ ] Run automated tests:
 
 ```bash
-python -m unittest discover -s tests
+python -m pytest
 ```
 
 ---
@@ -64,11 +64,11 @@ On Windows PowerShell:
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 ```
 
-Do not delete user data directories (`ChronoNotes/`, `settings/`, `metadata/`, `exports/`) unless intentionally testing a first-run scenario and backups are not needed. Do not commit any regenerated `build/` or `dist/` content.
+Do not delete user data directories (`ChronoNotes/`, `settings/`, `metadata/`, `exports/`) unless intentionally testing a first-run scenario and backups are not needed. Do not commit any regenerated `build/` or `dist/` content, binary installer output, `.exe`, `.dll`, `.pyd`, `.manifest`, bytecode, logs, or cache files.
 
 ---
 
-## 4. PyInstaller build
+## 4. PyInstaller build (local release environment only)
 
 Install PyInstaller in the build environment through the project requirements:
 
@@ -76,7 +76,7 @@ Install PyInstaller in the build environment through the project requirements:
 python -m pip install -r requirements.txt
 ```
 
-Run the source-controlled build wrapper for the current platform. Windows:
+Do not run PyInstaller inside a source-only PR whose purpose is to prepare packaging metadata. After that PR is reviewed, run the source-controlled build wrapper for the current platform in the local release environment. Windows:
 
 ```bat
 build.bat
@@ -101,9 +101,9 @@ python -m PyInstaller --clean --noconfirm sessionchrono.spec
 
 ---
 
-## 5. Inno Setup installer build (Windows)
+## 5. Inno Setup installer build (Windows local release environment only)
 
-After the PyInstaller one-folder build is verified:
+Do not run Inno Setup inside a source-only PR. After the PyInstaller one-folder build is verified in the Windows release environment:
 
 - [ ] Confirm `installer/SessionChrono.iss` points at `dist/SessionChrono/`.
 - [ ] Confirm installer metadata is correct: app name `SessionChrono`, version `2.0.0`, publisher, license file, icon, default install directory, and output filename `SessionChrono-2.0.0-Setup.exe`.
@@ -149,7 +149,7 @@ Run this smoke test against both source and packaged builds when possible:
 ## 7. Release notes and GitHub release
 
 - [ ] Update `CHANGELOG.md` with final v2.0.0 notes.
-- [ ] Commit documentation/package metadata updates.
+- [ ] Commit documentation/package metadata updates with no generated binary files.
 - [ ] Create an annotated tag:
 
 ```bash
@@ -158,7 +158,7 @@ git push origin v2.0.0
 ```
 
 - [ ] Create a GitHub release from the tag.
-- [ ] Attach release artifacts, such as:
+- [ ] Attach release artifacts generated outside Git, such as:
   - portable ZIP of `dist/SessionChrono/`;
   - Windows installer executable;
   - checksums file if produced.

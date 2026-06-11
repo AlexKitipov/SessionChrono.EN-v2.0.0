@@ -1,4 +1,6 @@
 ; Inno Setup script for packaging the PyInstaller one-folder SessionChrono build.
+; This source-controlled script is text-only; generated installers and compiled
+; artifacts belong in local dist/ folders or GitHub release uploads, never in Git.
 ; Build prerequisite from repository root:
 ;   python -m PyInstaller --clean --noconfirm sessionchrono.spec
 ; Then build this installer on Windows with:
@@ -10,7 +12,7 @@
 #define MyAppExeName "SessionChrono.exe"
 #define MyDistDir "..\dist\SessionChrono"
 #define MyOutputDir "..\dist\installer"
-#define MyOutputBaseFilename "SessionChrono-2.0.0-Setup"
+#define MyOutputBaseFilename MyAppName + "-" + MyAppVersion + "-Setup"
 
 #ifnexist MyDistDir + "\" + MyAppExeName
   #error "PyInstaller output was not found. Build dist\SessionChrono\SessionChrono.exe before running ISCC."
