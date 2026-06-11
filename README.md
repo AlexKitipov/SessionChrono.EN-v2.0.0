@@ -8,7 +8,7 @@ This version is fully modular, lightweight, and optimized for local use with Tki
 ## ✨ Features
 
 - Automatic clipboard monitoring
-- Categorized auto-saving (URL, CODE, TODO, CHAT, LOG, NOTE)
+- Categorized auto-saving (URL, CODE, MARKDOWN, JSON, XML, SQL, TRACEBACK, TODO, CHAT, LOG, NOTE)
 - Built-in text editor
 - Clipboard history panel
 - Last copied preview
@@ -28,6 +28,7 @@ SessionChrono.EN-v2.0.0/
 ├── core/
 │   ├── __init__.py
 │   ├── chrono.py
+│   ├── classifier.py
 │   ├── config.py
 │   ├── logger.py
 │   ├── storage.py
@@ -89,6 +90,21 @@ SessionChrono writes persistent diagnostic logs through `core/logger.py`. Log fi
 - PyInstaller / frozen Linux runs: `${XDG_DATA_HOME}/SessionChrono/ChronoNotes/application_logs/` or `~/.local/share/SessionChrono/ChronoNotes/application_logs/`
 
 The logs capture startup and shutdown, clipboard monitor lifecycle events, file save/load actions, search failures, ZIP creation, and sound playback fallback decisions. UI messages stay concise while logged exceptions preserve tracebacks for diagnostics.
+
+---
+
+
+## 🧠 Clipboard classification
+
+Clipboard text is classified by `core/classifier.py`, which scores all supported categories before selecting a deterministic best match. The classifier recognizes URL, CODE, MARKDOWN, JSON, XML, SQL, TRACEBACK, TODO, CHAT, LOG, and NOTE content, and can return a confidence score for callers that need more detail.
+
+`core.utils.classify_text(text)` remains available as a compatibility wrapper and returns only the category string used for folder and filename creation. Empty, whitespace-only, very large, and binary-like clipboard strings safely fall back to `NOTE` instead of raising errors.
+
+To run the classifier unit tests:
+
+```bash
+python -m unittest tests.test_classifier
+```
 
 ---
 
