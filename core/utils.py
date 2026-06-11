@@ -1,23 +1,10 @@
 from datetime import datetime
 
 from .config import LOG_ROOT
+from .classifier import classify_text
 from .logger import get_logger
 
 logger = get_logger()
-
-def classify_text(text: str) -> str:
-    t = text.strip().lower()
-    if any(x in t for x in ("http://", "https://", "www.")):
-        return "URL"
-    if any(x in t for x in ("exception", "traceback", "error", "stack trace")):
-        return "LOG"
-    if any(x in t for x in ("def ", "class ", "{", "};", "console.log", "function ")):
-        return "CODE"
-    if any(x in t for x in ("todo", "must", "fix ", "task", "to do")):
-        return "TODO"
-    if any(x in t for x in ("copilot", "chatgpt", "assistant", "ai", "model")):
-        return "CHAT"
-    return "NOTE"
 
 def make_short_title(text: str, max_len: int = 30) -> str:
     lines = text.strip().splitlines()
