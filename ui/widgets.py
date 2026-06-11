@@ -6,6 +6,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Iterable, Mapping
 
+from core.storage import SearchResult
+
 from core.logger import get_logger
 from ui.styles import (
     COLOR_ACCENT,
@@ -164,7 +166,7 @@ class StatusBar(tk.Frame):
 
 
 class SearchResultsList(tk.Listbox):
-    """Dark listbox used by pop-up result windows."""
+    """Dark listbox used by search dialogs."""
 
     def __init__(self, parent: tk.Misc):
         super().__init__(
@@ -174,3 +176,13 @@ class SearchResultsList(tk.Listbox):
             selectbackground=COLOR_MENU_ACTIVE,
             font=FONT_SEARCH_RESULTS,
         )
+
+    def set_results(self, results: Iterable[SearchResult]) -> None:
+        """Render structured search results in a stable display format."""
+
+        self.delete(0, tk.END)
+        for result in results:
+            self.insert(
+                tk.END,
+                f"{result.relative_path}:{result.line_number} — {result.snippet}",
+            )

@@ -105,12 +105,25 @@ The logs capture startup and shutdown, clipboard monitor lifecycle events, file 
 
 The Tkinter application is split into reusable UI foundation modules while preserving the existing desktop workflow:
 
-- `ui/styles.py` centralizes dark theme colors, fonts, menu styling, and ttk theme setup.
-- `ui/widgets.py` provides reusable scrollable text panes, clipboard history list, status bar, search result list, and the right-click context menu for copy/cut/paste/select-all/clear.
+- `ui/styles.py` centralizes dark theme colors, fonts, menu styling, dialog geometry, and ttk theme setup.
+- `ui/widgets.py` provides low-level reusable controls such as scrollable text panes, clipboard history lists, status bars, search result lists, and the right-click context menu for copy/cut/paste/select-all/clear.
+- `ui/components.py` composes higher-level main-window sections, including the editor panel, last-copied preview, clipboard history panel, and a reusable action strip for future toolbar work.
+- `ui/dialogs.py` owns pop-up UI flows for About, log search prompt/results, settings, entry details, and parented info/error message helpers.
 - `ui/sounds.py` owns sound playback and keeps the same optional WAV behavior: if a bundled WAV file exists under the configured `sounds/` resource directory it is used on Windows, otherwise the app falls back to a winsound beep or Tk bell without crashing.
-- `ui/tkinter_ui.py` keeps `SessionChronoUI` as the main application shell and composes the shared styles, widgets, and sound manager.
+- `ui/tkinter_ui.py` keeps `SessionChronoUI` as the main application shell and composes the shared styles, components, dialogs, widgets, and sound manager.
 
 These modules rely on centralized configuration from `core/config.py`, so source and PyInstaller/frozen runs resolve resources consistently.
+
+### Keyboard shortcuts
+
+The main Tkinter window registers common shortcuts for desktop workflows:
+
+- `Ctrl+N`: new editor document.
+- `Ctrl+O`: open a text file.
+- `Ctrl+S`: save the current file.
+- `Ctrl+Shift+S`: save as a new file.
+- `Ctrl+F`: search saved logs.
+- `Ctrl+P`: pause or resume clipboard monitoring.
 
 ---
 
