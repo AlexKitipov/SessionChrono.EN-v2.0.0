@@ -37,6 +37,9 @@ SessionChrono.EN-v2.0.0/
 │   └── .gitkeep
 ├── sounds/
 │   └── .gitkeep
+├── tests/
+│   ├── test_classifier.py
+│   └── test_storage.py
 ├── ui/
 │   ├── __init__.py
 │   └── tkinter_ui.py
@@ -94,6 +97,28 @@ The logs capture startup and shutdown, clipboard monitor lifecycle events, file 
 ---
 
 
+
+## 💾 Storage manager
+
+`core/storage.py` exposes a `StorageManager` class that owns note persistence below a configurable base directory. The Tkinter UI uses the default manager today, while compatibility wrappers such as `save_text()`, `load_text()`, `create_today_zip()`, and `search_logs()` remain available for older callers during the UI refactor.
+
+Storage operations now:
+
+- Create parent directories before writes and replace files atomically after writing a temporary file.
+- Return structured success/failure result objects from `StorageManager` methods instead of relying on uncaught file exceptions.
+- Treat missing or unreadable loads as clear failed results with empty content.
+- Build daily ZIP archives with archive members relative to the notes root, such as `YYYY-MM-DD/NOTE/example.txt`.
+- Return structured search results with absolute paths, relative paths, matched line numbers, snippets, filenames, and modification timestamps.
+- Provide export hook methods for future JSON, CSV, and Markdown integrations (`export_json()`, `export_csv()`, and `export_markdown()`).
+
+To run the storage integration tests against temporary directories:
+
+```bash
+python -m unittest tests.test_storage
+```
+
+---
+
 ## 🧠 Clipboard classification
 
 Clipboard text is classified by `core/classifier.py`, which scores all supported categories before selecting a deterministic best match. The classifier recognizes URL, CODE, MARKDOWN, JSON, XML, SQL, TRACEBACK, TODO, CHAT, LOG, and NOTE content, and can return a confidence score for callers that need more detail.
@@ -104,6 +129,16 @@ To run the classifier unit tests:
 
 ```bash
 python -m unittest tests.test_classifier
+```
+
+---
+
+## 🧪 Automated tests
+
+Run all automated tests with:
+
+```bash
+python -m unittest discover -s tests
 ```
 
 ---

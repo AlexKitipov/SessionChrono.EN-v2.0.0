@@ -8,14 +8,13 @@ from core.chrono import ClipboardMonitor
 from core.config import (
     APP_NAME,
     APP_VERSION,
-    LOG_ROOT,
     SOUNDS_DIR,
     WINDOW_DEFAULT_GEOMETRY,
     WINDOW_TITLE,
     ensure_user_directories,
 )
 from core.logger import APP_LOG_DIR, get_logger, log_shutdown, log_startup
-from core.storage import save_text, load_text, create_today_zip, search_logs
+from core.storage import get_default_storage_manager
 from core.utils import build_filename
 
 logger = get_logger()
@@ -160,6 +159,7 @@ class SessionChronoUI(tk.Tk):
         self.geometry(WINDOW_DEFAULT_GEOMETRY)
         self.configure(bg="#2d2d2d")
 
+        self.storage = get_default_storage_manager()
         self.sound = SoundManager(self)
         self.status_var = tk.StringVar()
         self.current_file_path = None
@@ -364,9 +364,11 @@ class SessionChronoUI(tk.Tk):
     # ---------- CLIPBOARD EVENT ----------
     def handle_new_clipboard_item(self, text: str):
         try:
-            path, folder, short, category = build_filename(text)
-            save_text(path, text)
-            self.last_record_path = path
+            path, folder, short, category = build_filename(text, self.storage.base_dir)
+            result = self.storage.save_text(path, text)
+            if not result.success:
+                raise RuntimeError(result.error or result.message)
+            self.last_record_path = result.path or path
 
             item_title = f"[{category}] {short}"
             self.history.insert(0, {"title": item_title, "path": path, "text": text})
@@ -398,7 +400,10 @@ class SessionChronoUI(tk.Tk):
         item = self.history[idx]
 
         try:
-            content = load_text(item["path"])
+            result = self.storage.load_text(item["path"])
+            if not result.success:
+                raise RuntimeError(result.error or result.message)
+            content = result.content
             self.editor.delete("1.0", tk.END)
             self.editor.insert("1.0", content)
             self.current_file_path = item["path"]
@@ -431,7 +436,10 @@ class SessionChronoUI(tk.Tk):
         if not path:
             return
         try:
-            content = load_text(path)
+            result = self.storage.load_text(path)
+            if not result.success:
+                raise RuntimeError(result.error or result.message)
+            content = result.content
             self.editor.delete("1.0", tk.END)
             self.editor.insert("1.0", content)
             self.current_file_path = path
@@ -447,7 +455,9 @@ class SessionChronoUI(tk.Tk):
             return self.save_file_as()
         try:
             content = self.editor.get("1.0", tk.END)
-            save_text(self.current_file_path, content)
+            result = self.storage.save_text(self.current_file_path, content)
+            if not result.success:
+                raise RuntimeError(result.error or result.message)
             self.status_var.set(f"Saved: {os.path.basename(self.current_file_path)}")
             self.sound.play("save")
         except Exception as e:
@@ -465,7 +475,9 @@ class SessionChronoUI(tk.Tk):
             return
         try:
             content = self.editor.get("1.0", tk.END)
-            save_text(path, content)
+            result = self.storage.save_text(path, content)
+            if not result.success:
+                raise RuntimeError(result.error or result.message)
             self.current_file_path = path
             self.status_var.set(f"Saved As: {os.path.basename(path)}")
             self.sound.play("save")
@@ -500,18 +512,19 @@ class SessionChronoUI(tk.Tk):
 
     def open_logs_folder(self):
         try:
-            LOG_ROOT.mkdir(parents=True, exist_ok=True)
+            notes_dir = self.storage.base_dir
+            notes_dir.mkdir(parents=True, exist_ok=True)
             if sys.platform.startswith("win"):
-                os.startfile(str(LOG_ROOT))
+                os.startfile(str(notes_dir))
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", str(LOG_ROOT)])
+                subprocess.Popen(["open", str(notes_dir)])
             else:
-                subprocess.Popen(["xdg-open", str(LOG_ROOT)])
-            logger.info("Opened notes folder: %s", LOG_ROOT)
+                subprocess.Popen(["xdg-open", str(notes_dir)])
+            logger.info("Opened notes folder: %s", notes_dir)
             self.status_var.set("Opened logs folder.")
             self.sound.play("open")
         except Exception as e:
-            logger.exception("Failed to open notes folder: %s", LOG_ROOT)
+            logger.exception("Failed to open notes folder: %s", self.storage.base_dir)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
@@ -521,7 +534,10 @@ class SessionChronoUI(tk.Tk):
             self.sound.play("error")
             return
         try:
-            content = load_text(self.last_record_path)
+            result = self.storage.load_text(self.last_record_path)
+            if not result.success:
+                raise RuntimeError(result.error or result.message)
+            content = result.content
             self.editor.delete("1.0", tk.END)
             self.editor.insert("1.0", content)
             self.current_file_path = self.last_record_path
@@ -534,8 +550,9 @@ class SessionChronoUI(tk.Tk):
 
     def create_zip(self):
         try:
-            zip_path = create_today_zip()
-            if not zip_path:
+            zip_result = self.storage.create_today_zip()
+            zip_path = zip_result.path
+            if not zip_result.success or not zip_path:
                 self.status_var.set("No logs for today.")
                 self.sound.play("error")
                 return
@@ -553,7 +570,7 @@ class SessionChronoUI(tk.Tk):
             return
 
         try:
-            matches = search_logs(query)
+            matches = self.storage.search_logs(query)
         except Exception as e:
             logger.exception("Search failed for query: %r", query)
             self.status_var.set(f"Search failed: {e}")
@@ -578,16 +595,23 @@ class SessionChronoUI(tk.Tk):
         lb.pack(fill="both", expand=True, padx=10, pady=10)
 
         logger.info("Search UI found %d match(es) for query: %r", len(matches), query)
-        for p in matches:
-            lb.insert(tk.END, p)
+        for result in matches:
+            lb.insert(
+                tk.END,
+                f"{result.relative_path}:{result.line_number} — {result.snippet}",
+            )
 
         def open_selected(_event=None):
             sel = lb.curselection()
             if not sel:
                 return
-            path = lb.get(sel[0])
+            result_item = matches[sel[0]]
+            path = result_item.path
             try:
-                content = load_text(path)
+                result = self.storage.load_text(path)
+                if not result.success:
+                    raise RuntimeError(result.error or result.message)
+                content = result.content
                 self.editor.delete("1.0", tk.END)
                 self.editor.insert("1.0", content)
                 self.current_file_path = path

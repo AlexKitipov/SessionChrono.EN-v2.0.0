@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 from .config import LOG_ROOT
 from .classifier import classify_text
@@ -17,16 +18,17 @@ def make_short_title(text: str, max_len: int = 30) -> str:
         line = line.replace(ch, "_")
     return line or "note"
 
-def build_filename(text: str):
+def build_filename(text: str, base_dir=LOG_ROOT):
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H-%M-%S")
 
+    base_dir = Path(base_dir)
+
     category = classify_text(text)
     short = make_short_title(text)
 
-    folder = LOG_ROOT / date_str / category
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = base_dir / date_str / category
     logger.info("Prepared note destination: folder=%s category=%s title=%r", folder, category, short)
 
     filename = f"{category}_{short}_{date_str}_{time_str}.txt"
