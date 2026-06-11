@@ -8,7 +8,7 @@ from core.app_controller import ApplicationController, ClipboardEntry
 from core.logger import APP_LOG_DIR, get_logger
 from ui.sounds import SoundManager
 from ui.components import ClipboardHistoryPanel, EditorPanel, LastCopiedPanel
-from ui.dialogs import EntryDetailsDialog, SearchDialog, SettingsDialog, show_about
+from ui.dialogs import EntryDetailsDialog, ExportDialog, SearchDialog, SettingsDialog, show_about
 from ui.styles import create_dark_menu, apply_window_style
 from ui.widgets import StatusBar
 
@@ -73,6 +73,10 @@ class SessionChronoUI(tk.Tk):
         tools_menu.add_command(
             label="Create ZIP of Today",
             command=self.create_zip,
+        )
+        tools_menu.add_command(
+            label="Export Notes...",
+            command=self.show_export_dialog,
         )
         tools_menu.add_command(
             label="Search Logs",
@@ -378,6 +382,14 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
+    def show_export_dialog(self):
+        ExportDialog(
+            self,
+            self.controller.storage,
+            self.report_dialog_success,
+            self.report_dialog_error,
+        )
+
     def search_logs_ui(self):
         dialog = SearchDialog(
             self,
@@ -392,6 +404,10 @@ class SessionChronoUI(tk.Tk):
         self.current_file_path = path
         self.status_var.set(f"Opened from search: {os.path.basename(path)}")
         self.sound.play("open")
+
+    def report_dialog_success(self, message: str):
+        self.status_var.set(message)
+        self.sound.play("save")
 
     def report_dialog_error(self, message: str):
         self.status_var.set(message)

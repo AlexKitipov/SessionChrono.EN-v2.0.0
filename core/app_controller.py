@@ -274,6 +274,9 @@ class ApplicationController:
     def create_today_zip(self) -> StorageOperationResult:
         return self.storage.create_today_zip()
 
+    def export_notes(self, format_name: str, destination: str | Path | None = None, **filters) -> StorageOperationResult:
+        return self.storage.export_notes(format_name, destination, **filters)
+
     def search_logs(self, query: str) -> list[SearchResult]:
         return self.storage.search_logs(query)
 

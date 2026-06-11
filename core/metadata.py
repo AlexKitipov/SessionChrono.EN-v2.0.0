@@ -80,6 +80,13 @@ class EntryMetadata:
         data["classifier_confidence"] = round(float(self.classifier_confidence), 4)
         return data
 
+    def to_export_dict(self) -> dict[str, Any]:
+        """Return metadata fields intended for bundled exports and reports."""
+
+        data = self.to_dict()
+        data["export_schema"] = "chrononotes.entry_metadata.v1"
+        return data
+
 
 @dataclass(frozen=True)
 class MetadataSearchResult:
