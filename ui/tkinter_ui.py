@@ -14,8 +14,11 @@ from core.config import (
     WINDOW_TITLE,
     ensure_user_directories,
 )
+from core.logger import APP_LOG_DIR, get_logger, log_shutdown, log_startup
 from core.storage import save_text, load_text, create_today_zip, search_logs
 from core.utils import build_filename
+
+logger = get_logger()
 
 # ---------- SOUND MANAGER ----------
 try:
@@ -51,6 +54,7 @@ class SoundManager:
 
     def play(self, event: str):
         if event not in BEEP_PATTERNS:
+            logger.warning("Unknown sound event requested: %s", event)
             return
 
         if HAS_WINSOUND:
@@ -63,21 +67,28 @@ class SoundManager:
                             str(wav_path),
                             winsound.SND_FILENAME | winsound.SND_ASYNC
                         )
+                        logger.info("Played WAV sound for event %s from %s", event, wav_path)
                         return
                     except Exception:
-                        pass
+                        logger.exception("Failed to play WAV sound for event %s; falling back", event)
+                else:
+                    logger.info("WAV sound missing for event %s at %s; falling back", event, wav_path)
 
             freq, dur = BEEP_PATTERNS[event]
             try:
                 winsound.Beep(freq, dur)
+                logger.info("Played winsound beep fallback for event %s", event)
                 return
             except Exception:
-                pass
+                logger.exception("Failed to play winsound beep for event %s; falling back to Tk bell", event)
+        else:
+            logger.info("winsound unavailable; falling back to Tk bell for event %s", event)
 
         try:
             self.root.bell()
+            logger.info("Played Tk bell fallback for event %s", event)
         except Exception:
-            pass
+            logger.exception("Failed to play Tk bell fallback for event %s", event)
 
 
 # ---------- RIGHT CLICK MENU ----------
@@ -114,7 +125,7 @@ class RightClickMenu:
             self.widget.clipboard_clear()
             self.widget.clipboard_append(text)
         except Exception:
-            pass
+            logger.debug("Right-click copy ignored because no selection was available", exc_info=True)
 
     def cut(self):
         try:
@@ -123,14 +134,14 @@ class RightClickMenu:
             self.widget.clipboard_append(text)
             self.widget.delete("sel.first", "sel.last")
         except Exception:
-            pass
+            logger.debug("Right-click cut ignored because no selection was available", exc_info=True)
 
     def paste(self):
         try:
             text = self.widget.clipboard_get()
             self.widget.insert(tk.INSERT, text)
         except Exception:
-            pass
+            logger.debug("Right-click paste ignored because clipboard text was unavailable", exc_info=True)
 
     def select_all(self):
         self.widget.tag_add("sel", "1.0", "end")
@@ -144,6 +155,7 @@ class SessionChronoUI(tk.Tk):
     def __init__(self):
         super().__init__()
         ensure_user_directories()
+        log_startup()
         self.title(WINDOW_TITLE)
         self.geometry(WINDOW_DEFAULT_GEOMETRY)
         self.configure(bg="#2d2d2d")
@@ -167,6 +179,7 @@ class SessionChronoUI(tk.Tk):
         # Clipboard monitor
         self.monitor = ClipboardMonitor(self.handle_new_clipboard_item)
         self.monitor.start()
+        logger.info("SessionChrono UI initialized; application logs are stored in %s", APP_LOG_DIR)
 
     # ---------- UI STYLE ----------
     def _build_style(self):
@@ -367,6 +380,7 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set(f"Saved clipboard: {item_title}")
             self.sound.play("copy")
         except Exception as e:
+            logger.exception("Failed to handle clipboard item")
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
@@ -391,16 +405,19 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set(f"Opened: {os.path.basename(item['path'])}")
             self.sound.play("open")
         except Exception as e:
+            logger.exception("Failed to open history item: %s", item["path"])
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
     def clear_history(self):
+        logger.info("Clearing in-memory clipboard history containing %d item(s)", len(self.history))
         self.history.clear()
         self.refresh_history()
         self.status_var.set("Session history cleared.")
 
     # ---------- FILE OPS ----------
     def new_file(self):
+        logger.info("Creating new editor document")
         self.editor.delete("1.0", tk.END)
         self.current_file_path = None
         self.status_var.set("New file.")
@@ -421,6 +438,7 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set(f"Opened: {os.path.basename(path)}")
             self.sound.play("open")
         except Exception as e:
+            logger.exception("Failed to open file: %s", path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
@@ -433,6 +451,7 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set(f"Saved: {os.path.basename(self.current_file_path)}")
             self.sound.play("save")
         except Exception as e:
+            logger.exception("Failed to save file: %s", self.current_file_path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
@@ -451,6 +470,7 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set(f"Saved As: {os.path.basename(path)}")
             self.sound.play("save")
         except Exception as e:
+            logger.exception("Failed to save file as: %s", path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
@@ -459,19 +479,22 @@ class SessionChronoUI(tk.Tk):
         # Важно: да не стартираме монитор-а многократно
         self.logging_active = not self.logging_active
 
+        logger.info("Clipboard monitoring toggled; active=%s", self.logging_active)
+
         if self.logging_active:
             try:
                 self.monitor.start()
             except RuntimeError:
-                # ако вече е стартиран, игнорираме
-                pass
+                logger.exception("Clipboard monitor could not be resumed")
+            logger.info("Clipboard monitoring resumed")
             self.status_var.set("Clipboard monitoring resumed.")
             self.sound.play("resume")
         else:
             try:
                 self.monitor.stop()
             except Exception:
-                pass
+                logger.exception("Clipboard monitor could not be paused")
+            logger.info("Clipboard monitoring paused")
             self.status_var.set("Clipboard monitoring paused.")
             self.sound.play("pause")
 
@@ -484,9 +507,11 @@ class SessionChronoUI(tk.Tk):
                 subprocess.Popen(["open", str(LOG_ROOT)])
             else:
                 subprocess.Popen(["xdg-open", str(LOG_ROOT)])
+            logger.info("Opened notes folder: %s", LOG_ROOT)
             self.status_var.set("Opened logs folder.")
             self.sound.play("open")
         except Exception as e:
+            logger.exception("Failed to open notes folder: %s", LOG_ROOT)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
@@ -503,24 +528,37 @@ class SessionChronoUI(tk.Tk):
             self.status_var.set("Opened last auto-note.")
             self.sound.play("open")
         except Exception as e:
+            logger.exception("Failed to open last auto-note: %s", self.last_record_path)
             self.status_var.set(f"Error: {e}")
             self.sound.play("error")
 
     def create_zip(self):
-        zip_path = create_today_zip()
-        if not zip_path:
-            self.status_var.set("No logs for today.")
+        try:
+            zip_path = create_today_zip()
+            if not zip_path:
+                self.status_var.set("No logs for today.")
+                self.sound.play("error")
+                return
+            logger.info("Created ZIP from UI action: %s", zip_path)
+            self.status_var.set(f"Created ZIP: {os.path.basename(zip_path)}")
+            self.sound.play("save")
+        except Exception as e:
+            logger.exception("Failed to create ZIP from UI action")
+            self.status_var.set(f"Error: {e}")
             self.sound.play("error")
-            return
-        self.status_var.set(f"Created ZIP: {os.path.basename(zip_path)}")
-        self.sound.play("save")
 
     def search_logs_ui(self):
         query = simpledialog.askstring("Search Logs", "Enter text:")
         if not query:
             return
 
-        matches = search_logs(query)
+        try:
+            matches = search_logs(query)
+        except Exception as e:
+            logger.exception("Search failed for query: %r", query)
+            self.status_var.set(f"Search failed: {e}")
+            self.sound.play("error")
+            return
         if not matches:
             messagebox.showinfo("Search Logs", "No matches found.")
             return
@@ -539,6 +577,7 @@ class SessionChronoUI(tk.Tk):
         )
         lb.pack(fill="both", expand=True, padx=10, pady=10)
 
+        logger.info("Search UI found %d match(es) for query: %r", len(matches), query)
         for p in matches:
             lb.insert(tk.END, p)
 
@@ -558,6 +597,7 @@ class SessionChronoUI(tk.Tk):
                 self.sound.play("open")
                 win.destroy()
             except Exception as e:
+                logger.exception("Failed to open search result: %s", path)
                 self.status_var.set(f"Error: {e}")
                 self.sound.play("error")
 
@@ -577,7 +617,8 @@ class SessionChronoUI(tk.Tk):
         try:
             self.monitor.stop()
         except Exception:
-            pass
+            logger.exception("Failed to stop clipboard monitor during shutdown")
+        log_shutdown()
         self.destroy()
 
 

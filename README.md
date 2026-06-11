@@ -1,6 +1,6 @@
 # SessionChrono – Modular Clipboard Notepad (Tkinter Edition)
 
-SessionChrono is a smart clipboard-logging notepad that automatically saves copied text into categorized files.  
+SessionChrono is a smart clipboard-logging notepad that automatically saves copied text into categorized files.
 This version is fully modular, lightweight, and optimized for local use with Tkinter.
 
 ---
@@ -14,6 +14,7 @@ This version is fully modular, lightweight, and optimized for local use with Tki
 - Last copied preview
 - Search inside logs
 - ZIP archiving of daily notes
+- Persistent daily application logs for diagnostics
 - Sound alerts (WAV or fallback beep)
 - Centralized runtime path and resource configuration
 - Works fully offline
@@ -28,6 +29,7 @@ SessionChrono.EN-v2.0.0/
 │   ├── __init__.py
 │   ├── chrono.py
 │   ├── config.py
+│   ├── logger.py
 │   ├── storage.py
 │   └── utils.py
 ├── icons/
@@ -70,6 +72,23 @@ When `sys.frozen` is present, SessionChrono treats the executable location as th
 Inside that writable data root, notes continue to live under `ChronoNotes/`, with additional directories reserved for `settings/`, `metadata/`, and `exports/`.
 
 Bundled resources are resolved from the PyInstaller bundle extraction/root path where available, so empty `sounds/` and `icons/` directories are safe and do not cause tracebacks.
+
+### Application diagnostics logs
+
+SessionChrono writes persistent diagnostic logs through `core/logger.py`. Log files are created daily under:
+
+```text
+<LOG_ROOT>/application_logs/SessionChrono_YYYY-MM-DD.log
+```
+
+`LOG_ROOT` is resolved by `core/config.py`:
+
+- Source / development runs: `<repository>/ChronoNotes/application_logs/`
+- PyInstaller / frozen Windows runs: `%APPDATA%\SessionChrono\ChronoNotes\application_logs\`
+- PyInstaller / frozen macOS runs: `~/Library/Application Support/SessionChrono/ChronoNotes/application_logs/`
+- PyInstaller / frozen Linux runs: `${XDG_DATA_HOME}/SessionChrono/ChronoNotes/application_logs/` or `~/.local/share/SessionChrono/ChronoNotes/application_logs/`
+
+The logs capture startup and shutdown, clipboard monitor lifecycle events, file save/load actions, search failures, ZIP creation, and sound playback fallback decisions. UI messages stay concise while logged exceptions preserve tracebacks for diagnostics.
 
 ---
 
