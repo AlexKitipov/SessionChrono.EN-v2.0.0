@@ -27,6 +27,7 @@ This version is fully modular, lightweight, and optimized for local use with Tki
 SessionChrono.EN-v2.0.0/
 ├── core/
 │   ├── __init__.py
+│   ├── app_controller.py
 │   ├── chrono.py
 │   ├── classifier.py
 │   ├── config.py
@@ -38,10 +39,13 @@ SessionChrono.EN-v2.0.0/
 ├── sounds/
 │   └── .gitkeep
 ├── tests/
+│   ├── test_app_controller.py
 │   ├── test_classifier.py
 │   └── test_storage.py
 ├── ui/
 │   ├── __init__.py
+│   ├── components.py
+│   ├── dialogs.py
 │   ├── sounds.py
 │   ├── styles.py
 │   ├── tkinter_ui.py
@@ -99,7 +103,22 @@ The logs capture startup and shutdown, clipboard monitor lifecycle events, file 
 
 ---
 
+## 🧭 Application controller boundary
 
+`core/app_controller.py` owns the application behavior that used to live directly in the Tkinter window:
+
+- Starting, pausing, resuming, and shutting down the clipboard monitor.
+- Receiving clipboard text events from `core/chrono.py`.
+- Building categorized filenames through `core/utils.py`.
+- Saving clipboard text through `core/storage.py`.
+- Maintaining the current in-memory session history and last auto-note path.
+- Emitting startup, shutdown, persistence, and monitor lifecycle diagnostics through `core/logger.py`.
+
+`ui/tkinter_ui.py` now acts as a view layer: it wires menu commands and shortcuts to controller methods, renders controller state into the editor/history/preview widgets, and keeps file dialogs or platform folder-opening UI in the Tkinter shell. The `main.py` entry point remains the source and PyInstaller startup path.
+
+Clipboard monitoring lifecycle is explicit and idempotent. Pausing stops and joins the current monitor loop, resuming creates a fresh background thread through the monitor object instead of attempting to restart a consumed `threading.Thread`, and repeated pause/resume requests are safe. This prevents background clipboard polling from keeping a frozen executable alive after the window closes.
+
+---
 
 ## 🖥️ UI foundation modules
 

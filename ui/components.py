@@ -81,6 +81,10 @@ class ClipboardHistoryPanel(ttk.Frame):
     def curselection(self) -> tuple[int, ...]:
         return self.history_list.curselection()
 
+    def selected_index(self) -> int | None:
+        selection = self.curselection()
+        return selection[0] if selection else None
+
 
 class ActionStrip(ttk.Frame):
     """Compact toolbar/action strip for commonly used commands."""
