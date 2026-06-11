@@ -22,7 +22,7 @@ from .storage import (
     StorageOperationResult,
     get_default_storage_manager,
 )
-from .utils import build_filename
+from .utils import build_filename, classify_text_with_confidence
 
 logger = get_logger()
 
@@ -37,6 +37,7 @@ class ClipboardEntry:
     short_title: str
     category: str
     folder: str
+    metadata_id: str | None = None
 
     def as_history_item(self) -> dict[str, str]:
         """Return the legacy mapping shape consumed by the history list widget."""
@@ -202,10 +203,25 @@ class ApplicationController:
 
         try:
             path, folder, short, category = self.filename_builder(text, self.storage.base_dir)
+            classification_category, confidence = classify_text_with_confidence(text)
+            if classification_category != category:
+                logger.debug(
+                    "Filename category %s differed from classifier category %s",
+                    category,
+                    classification_category,
+                )
             result = self.storage.save_text(path, text)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
             saved_path = result.path or path
+            metadata = self.storage.metadata.create_metadata(
+                file_path=saved_path,
+                category=category,
+                title=f"[{category}] {short}",
+                short_title=short,
+                text_length=len(text),
+                classifier_confidence=confidence,
+            )
             entry = ClipboardEntry(
                 title=f"[{category}] {short}",
                 path=saved_path,
@@ -213,6 +229,7 @@ class ApplicationController:
                 short_title=short,
                 category=category,
                 folder=folder,
+                metadata_id=metadata.entry_id,
             )
             with self._lock:
                 self._last_record_path = saved_path
@@ -251,6 +268,15 @@ class ApplicationController:
 
     def search_logs(self, query: str) -> list[SearchResult]:
         return self.storage.search_logs(query)
+
+    def load_metadata_by_path(self, path: str | Path):
+        return self.storage.load_metadata_by_path(path)
+
+    def update_metadata(self, entry_id: str, **fields):
+        return self.storage.update_metadata(entry_id, **fields)
+
+    def search_metadata(self, query: str = "", *, tags=None):
+        return self.storage.search_metadata(query, tags=tags)
 
     def _notify_monitoring_changed(self, active: bool) -> None:
         if self.on_monitoring_changed:

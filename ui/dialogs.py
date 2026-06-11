@@ -9,6 +9,7 @@ from typing import Callable, Protocol
 
 from core.config import APP_NAME, APP_VERSION
 from core.logger import get_logger
+from core.metadata import EntryMetadata
 from core.storage import SearchResult
 from ui.styles import COLOR_WINDOW_BG, DIALOG_GEOMETRIES
 from ui.widgets import SearchResultsList
@@ -171,14 +172,27 @@ class SettingsDialog(tk.Toplevel):
 
 
 class EntryDetailsDialog(tk.Toplevel):
-    """Read-only note details/properties shell."""
+    """Entry details dialog with editable tags and annotation."""
 
-    def __init__(self, parent: tk.Misc, *, title: str, path: str, content: str):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        title: str,
+        path: str,
+        content: str,
+        metadata: EntryMetadata | None = None,
+        on_save: Callable[[EntryMetadata, list[str], str], EntryMetadata] | None = None,
+    ):
         super().__init__(parent)
         self.title("Entry Details")
         self.geometry(DIALOG_GEOMETRIES["entry_details"])
         self.configure(bg=COLOR_WINDOW_BG)
         self.transient(parent)
+        self.metadata = metadata
+        self.on_save = on_save
+        self.tags_var = tk.StringVar(value=", ".join(metadata.user_tags) if metadata else "")
+        self.note_text: tk.Text | None = None
         self._build_body(title=title, path=path, content=content)
 
     def _build_body(self, *, title: str, path: str, content: str) -> None:
@@ -186,15 +200,65 @@ class EntryDetailsDialog(tk.Toplevel):
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(1, weight=1)
 
-        details = (
-            ("Title", title),
+        metadata = self.metadata
+        details = [
+            ("Title", metadata.title if metadata else title),
             ("File", os.path.basename(path) if path else "Unsaved"),
             ("Path", path or "Unsaved editor content"),
-            ("Characters", str(len(content))),
+            ("Characters", str(metadata.text_length if metadata else len(content))),
             ("Lines", str(len(content.splitlines()) or 1)),
-        )
+        ]
+        if metadata:
+            details.extend(
+                [
+                    ("Entry ID", metadata.entry_id),
+                    ("Created", metadata.created_at),
+                    ("Category", metadata.category),
+                    ("Confidence", f"{metadata.classifier_confidence:.2%}"),
+                    ("Text file", "Available" if metadata.file_readable else "Missing or unreadable"),
+                ]
+            )
+        else:
+            details.append(("Metadata", "No sidecar metadata found for this entry."))
+
         for row, (label, value) in enumerate(details):
             ttk.Label(frame, text=f"{label}:").grid(row=row, column=0, sticky="nw", padx=(0, 8), pady=2)
             ttk.Label(frame, text=value, wraplength=360).grid(row=row, column=1, sticky="ew", pady=2)
 
-        ttk.Button(frame, text="Close", command=self.destroy).grid(row=len(details), column=1, sticky="e", pady=(12, 0))
+        edit_row = len(details)
+        ttk.Label(frame, text="Tags:").grid(row=edit_row, column=0, sticky="nw", padx=(0, 8), pady=(10, 2))
+        tags_entry = ttk.Entry(frame, textvariable=self.tags_var, state="normal" if metadata else "disabled")
+        tags_entry.grid(row=edit_row, column=1, sticky="ew", pady=(10, 2))
+        ttk.Label(frame, text="Use commas to separate tags.").grid(row=edit_row + 1, column=1, sticky="w")
+
+        ttk.Label(frame, text="Annotation:").grid(row=edit_row + 2, column=0, sticky="nw", padx=(0, 8), pady=(8, 2))
+        self.note_text = tk.Text(frame, height=5, wrap="word")
+        self.note_text.grid(row=edit_row + 2, column=1, sticky="nsew", pady=(8, 2))
+        self.note_text.insert("1.0", metadata.note if metadata else "")
+        if not metadata:
+            self.note_text.configure(state="disabled")
+        frame.rowconfigure(edit_row + 2, weight=1)
+
+        button_row = ttk.Frame(frame)
+        button_row.grid(row=edit_row + 3, column=1, sticky="e", pady=(12, 0))
+        ttk.Button(
+            button_row,
+            text="Save Metadata",
+            command=self.save_metadata,
+            state="normal" if metadata else "disabled",
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(button_row, text="Close", command=self.destroy).pack(side="left")
+
+    def save_metadata(self) -> None:
+        """Persist editable tags and annotation through the provided callback."""
+
+        if not self.metadata or self.on_save is None or self.note_text is None:
+            return
+        tags = [part.strip() for part in self.tags_var.get().split(",") if part.strip()]
+        note = self.note_text.get("1.0", "end").strip()
+        try:
+            self.metadata = self.on_save(self.metadata, tags, note)
+            show_info(self, "Entry Details", "Metadata saved.")
+        except Exception as exc:
+            logger.exception("Failed to save entry metadata: %s", self.metadata.entry_id)
+            show_error(self, "Entry Details", f"Failed to save metadata: {exc}")

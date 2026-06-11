@@ -75,6 +75,12 @@ class ApplicationControllerTests(unittest.TestCase):
         self.assertEqual(saved_entries, [entry])
         self.assertTrue(Path(entry.path).exists())
         self.assertEqual(Path(entry.path).read_text(encoding="utf-8"), "remember this")
+        self.assertIsNotNone(entry.metadata_id)
+        metadata = self.storage.load_metadata_by_path(entry.path)
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.entry_id, entry.metadata_id)
+        self.assertEqual(metadata.category, "NOTE")
+        self.assertEqual(metadata.text_length, len("remember this"))
 
     def test_clipboard_text_is_ignored_when_paused(self):
         controller = self.make_controller()

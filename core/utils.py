@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import LOG_ROOT
-from .classifier import classify_text
+from .classifier import classifier, classify_text
 from .logger import get_logger
 
 logger = get_logger()
@@ -17,6 +17,14 @@ def make_short_title(text: str, max_len: int = 30) -> str:
     for ch in bad:
         line = line.replace(ch, "_")
     return line or "note"
+
+
+def classify_text_with_confidence(text: object) -> tuple[str, float]:
+    """Return the classifier category and confidence for metadata callers."""
+
+    category, confidence = classifier.classify(text, confidence=True)
+    return str(category), float(confidence)
+
 
 def build_filename(text: str, base_dir=LOG_ROOT):
     now = datetime.now()

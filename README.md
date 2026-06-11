@@ -13,6 +13,7 @@ This version is fully modular, lightweight, and optimized for local use with Tki
 - Clipboard history panel
 - Last copied preview
 - Search inside logs
+- JSON sidecar metadata with entry IDs, categories, titles, classifier confidence, tags, and annotations
 - ZIP archiving of daily notes
 - Persistent daily application logs for diagnostics
 - Sound alerts (WAV or fallback beep)
@@ -163,6 +164,25 @@ To run the storage integration tests against temporary directories:
 
 ```bash
 python -m unittest tests.test_storage
+```
+
+---
+
+## 🏷️ Entry metadata and tagging
+
+Each auto-saved clipboard entry now gets a JSON sidecar managed by `core/metadata.py`. Metadata sidecars are stored under the configured metadata directory (`metadata/` in source runs, or the per-user data directory for PyInstaller/frozen builds) and include:
+
+- Entry ID, file path, created timestamp, category, title, and short title.
+- Text length and classifier confidence.
+- Editable user tags and an optional annotation/note.
+- File availability flags so metadata can still be loaded and searched if the text file was moved, deleted, or is unreadable.
+
+The Tkinter **Entry Details** dialog shows metadata for the current editor file or selected history item, and lets users add/edit comma-separated tags plus a free-form annotation. `StorageManager` exposes `load_metadata_by_path()`, `update_metadata()`, and `search_metadata()` for future filtering and export features.
+
+To run the metadata tests:
+
+```bash
+python -m unittest tests.test_metadata
 ```
 
 ---
