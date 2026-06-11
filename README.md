@@ -14,7 +14,7 @@ This version is fully modular, lightweight, and optimized for local use with Tki
 - Last copied preview
 - Search inside logs with text, category, date, tag, and filename/title filters
 - JSON sidecar metadata with entry IDs, categories, titles, classifier confidence, tags, and annotations
-- ZIP archiving of daily notes
+- Multi-format exports: plain text bundles, JSON with metadata, CSV summaries, Markdown reports, and ZIP archives
 - Persistent daily application logs for diagnostics
 - Sound alerts (WAV or fallback beep)
 - Centralized runtime path and resource configuration
@@ -29,6 +29,7 @@ SessionChrono.EN-v2.0.0/
 ├── core/
 │   ├── __init__.py
 │   ├── app_controller.py
+│   ├── export.py
 │   ├── chrono.py
 │   ├── classifier.py
 │   ├── config.py
@@ -42,6 +43,7 @@ SessionChrono.EN-v2.0.0/
 ├── tests/
 │   ├── test_app_controller.py
 │   ├── test_classifier.py
+│   ├── test_export.py
 │   ├── test_metadata.py
 │   ├── test_search.py
 │   └── test_storage.py
@@ -130,7 +132,7 @@ The Tkinter application is split into reusable UI foundation modules while prese
 - `ui/styles.py` centralizes dark theme colors, fonts, menu styling, dialog geometry, and ttk theme setup.
 - `ui/widgets.py` provides low-level reusable controls such as scrollable text panes, clipboard history lists, status bars, search result lists, and the right-click context menu for copy/cut/paste/select-all/clear.
 - `ui/components.py` composes higher-level main-window sections, including the editor panel, last-copied preview, clipboard history panel, and a reusable action strip for future toolbar work.
-- `ui/dialogs.py` owns pop-up UI flows for About, filtered log search/results, settings, entry details, and parented info/error message helpers.
+- `ui/dialogs.py` owns pop-up UI flows for About, filtered log search/results, export options, settings, entry details, and parented info/error message helpers.
 - `ui/sounds.py` owns sound playback and keeps the same optional WAV behavior: if a bundled WAV file exists under the configured `sounds/` resource directory it is used on Windows, otherwise the app falls back to a winsound beep or Tk bell without crashing.
 - `ui/tkinter_ui.py` keeps `SessionChronoUI` as the main application shell and composes the shared styles, components, dialogs, widgets, and sound manager.
 
@@ -158,9 +160,10 @@ Storage operations now:
 - Create parent directories before writes and replace files atomically after writing a temporary file.
 - Return structured success/failure result objects from `StorageManager` methods instead of relying on uncaught file exceptions.
 - Treat missing or unreadable loads as clear failed results with empty content.
-- Build daily ZIP archives with archive members relative to the notes root, such as `YYYY-MM-DD/NOTE/example.txt`.
+- Build daily ZIP archives through the export service with archive members relative to the notes root, such as `YYYY-MM-DD/NOTE/example.txt`, plus `manifest.json` and metadata sidecars when available.
 - Return structured search results with absolute paths, relative paths, matched line numbers, snippets, filenames, modification timestamps, categories, creation timestamps, tags, and safe missing-file availability flags.
-- Provide export hook methods for future JSON, CSV, and Markdown integrations (`export_json()`, `export_csv()`, and `export_markdown()`).
+- Export ChronoNotes in production-ready formats: TXT bundles, JSON records with metadata, CSV summaries, Markdown reports, and ZIP archives. Relative export filenames are written below the configured exports directory by default, which keeps frozen/PyInstaller builds from writing inside the bundled application directory.
+- Apply date-range and category filters consistently across export formats.
 
 To run the storage integration tests against temporary directories:
 
@@ -190,6 +193,26 @@ To run the filtered search tests:
 ```bash
 python -m unittest tests.test_search
 ```
+
+
+## 📤 Exporting ChronoNotes
+
+Use **Tools → Export Notes...** to create shareable files from saved ChronoNotes. The export dialog supports:
+
+- Format selection for plain text (`.txt`), JSON (`.json`), CSV (`.csv`), Markdown (`.md`), or ZIP (`.zip`).
+- Optional category filtering, such as `NOTE`, `URL`, or `CODE`.
+- Optional date ranges using `YYYY-MM-DD`.
+- Default output into the configured exports directory (`exports/` in source runs, or the per-user data directory in PyInstaller/frozen builds).
+
+The legacy **Create ZIP of Today** menu action is still available, but it now uses the same export service and writes a ZIP containing today's text files, a `manifest.json`, and metadata JSON files for entries that have sidecars.
+
+To run the export tests:
+
+```bash
+python -m unittest tests.test_export
+```
+
+---
 
 ## 🏷️ Entry metadata and tagging
 

@@ -54,7 +54,7 @@ class StorageManagerTests(unittest.TestCase):
         with zipfile.ZipFile(result.path) as archive:
             self.assertEqual(
                 sorted(archive.namelist()),
-                ["2026-06-11/NOTE/one.txt", "2026-06-11/URL/two.txt"],
+                ["2026-06-11/NOTE/one.txt", "2026-06-11/URL/two.txt", "manifest.json"],
             )
 
     def test_create_today_zip_reports_missing_day_without_exception(self):
@@ -74,11 +74,13 @@ class StorageManagerTests(unittest.TestCase):
         self.assertTrue(result.success, result.error)
         self.assertEqual(Path(result.path).read_text(encoding="utf-8"), "exported from ChronoNotes")
 
-    def test_unimplemented_export_returns_clear_failure(self):
+    def test_builtin_csv_export_writes_file(self):
+        self.storage.save_text("2026-06-11/NOTE/one.txt", "one")
+
         result = self.storage.export_csv(self.exports_dir / "notes.csv")
 
-        self.assertFalse(result.success)
-        self.assertIn("not implemented", result.message)
+        self.assertTrue(result.success, result.error)
+        self.assertIn("relative_path", Path(result.path).read_text(encoding="utf-8"))
 
     def test_build_filename_accepts_injected_base_directory(self):
         full_path, folder, short, category = build_filename("remember this", self.base_dir)

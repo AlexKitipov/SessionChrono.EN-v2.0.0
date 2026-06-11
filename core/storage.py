@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import os
 import tempfile
-import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Callable
 
 from .config import EXPORTS_DIR, LOG_ROOT, METADATA_DIR
+from .export import ChronoNotesExporter, ExportFilters, default_export_filename, normalize_export_format
 from .logger import get_logger
 from .metadata import EntryMetadata, MetadataManager
 
@@ -100,6 +100,7 @@ class StorageManager:
             else self.base_dir.parent / "metadata"
         )
         self.metadata = MetadataManager(default_metadata_dir)
+        self.exporter = ChronoNotesExporter(self.base_dir, self.metadata)
 
     def resolve_path(self, path: str | os.PathLike[str]) -> Path:
         """Resolve absolute paths as-is and relative paths under ``base_dir``."""
@@ -167,29 +168,13 @@ class StorageManager:
             return LoadTextResult(False, str(source), message="Failed to load text file.", error=str(exc))
 
     def create_today_zip(self, target_date: date | None = None) -> StorageOperationResult:
-        """Create a ZIP archive for one day's notes using paths relative to ``base_dir``."""
+        """Create a ZIP archive for one day's notes through the export service."""
 
         target_date = target_date or datetime.now().date()
-        day_name = target_date.strftime("%Y-%m-%d")
-        day_folder = self.base_dir / day_name
-        zip_path = self.base_dir / f"{day_name}_ChronoNotes.zip"
-        logger.info("Creating ZIP for %s from %s", day_name, day_folder)
-
-        if not day_folder.exists():
-            message = "No notes found for ZIP creation."
-            logger.info("%s path=%s", message, day_folder)
-            return StorageOperationResult(False, str(zip_path), message)
-
-        try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for full_path in sorted(path for path in day_folder.rglob("*") if path.is_file()):
-                    zf.write(full_path, full_path.relative_to(self.base_dir).as_posix())
-            logger.info("Created ZIP archive: %s", zip_path)
-            return StorageOperationResult(True, str(zip_path), "Created ZIP archive.")
-        except Exception as exc:
-            logger.exception("Failed to create ZIP archive: %s", zip_path)
-            return StorageOperationResult(False, str(zip_path), "Failed to create ZIP archive.", str(exc))
+        filters = ExportFilters(date_from=target_date, date_to=target_date)
+        destination = self.exports_dir / default_export_filename("zip", filters)
+        logger.info("Creating daily ZIP export for %s at %s", target_date.isoformat(), destination)
+        return self.export_notes("zip", destination, filters=filters, reject_empty=True)
 
     def search_logs(
         self,
@@ -469,31 +454,66 @@ class StorageManager:
         self,
         format_name: str,
         destination: str | os.PathLike[str] | None = None,
+        *,
+        filters: ExportFilters | None = None,
+        date_from: date | datetime | str | None = None,
+        date_to: date | datetime | str | None = None,
+        category: str | None = None,
+        reject_empty: bool = False,
     ) -> StorageOperationResult:
-        """Invoke a registered export hook or report a clear unsupported format."""
+        """Export notes in TXT, JSON, CSV, Markdown, or ZIP format."""
 
-        normalized_format = format_name.casefold()
-        destination_path = self.resolve_path(destination) if destination else self.exports_dir / normalized_format
-        exporter = self._exporters.get(normalized_format)
-        if not exporter:
-            message = f"Export format is not implemented: {format_name}"
-            logger.info(message)
-            return StorageOperationResult(False, str(destination_path), message)
         try:
+            normalized_format = normalize_export_format(format_name)
+        except ValueError as exc:
+            destination_path = self.exports_dir / str(format_name or "export")
+            return StorageOperationResult(False, str(destination_path), str(exc), str(exc))
+
+        export_filters = filters or ExportFilters(date_from=date_from, date_to=date_to, category=category)
+        destination_path = self._resolve_export_destination(destination, normalized_format, export_filters)
+        custom_exporter = self._exporters.get(normalized_format)
+        try:
+            if reject_empty and not self.exporter.collect_items(export_filters):
+                message = "No notes found for export."
+                logger.info("%s format=%s filters=%s", message, normalized_format, export_filters)
+                return StorageOperationResult(False, str(destination_path), message)
             destination_path.parent.mkdir(parents=True, exist_ok=True)
-            return exporter(self.base_dir, destination_path)
+            if custom_exporter:
+                return custom_exporter(self.base_dir, destination_path)
+            final_path = self.exporter.export(normalized_format, destination_path, export_filters)
+            logger.info("Exported notes as %s to %s", normalized_format, final_path)
+            return StorageOperationResult(True, str(final_path), f"Exported notes as {normalized_format}.")
         except Exception as exc:
-            logger.exception("Failed to export notes as %s to %s", format_name, destination_path)
+            logger.exception("Failed to export notes as %s to %s", normalized_format, destination_path)
             return StorageOperationResult(False, str(destination_path), "Failed to export notes.", str(exc))
 
-    def export_json(self, destination: str | os.PathLike[str] | None = None) -> StorageOperationResult:
-        return self.export_notes("json", destination)
+    def _resolve_export_destination(
+        self,
+        destination: str | os.PathLike[str] | None,
+        format_name: str,
+        filters: ExportFilters | None,
+    ) -> Path:
+        if destination in (None, ""):
+            return self.exports_dir / default_export_filename(format_name, filters)
+        candidate = Path(destination).expanduser()
+        if not candidate.is_absolute():
+            candidate = self.exports_dir / candidate
+        return candidate.resolve()
 
-    def export_csv(self, destination: str | os.PathLike[str] | None = None) -> StorageOperationResult:
-        return self.export_notes("csv", destination)
+    def export_txt(self, destination: str | os.PathLike[str] | None = None, **filters) -> StorageOperationResult:
+        return self.export_notes("txt", destination, **filters)
 
-    def export_markdown(self, destination: str | os.PathLike[str] | None = None) -> StorageOperationResult:
-        return self.export_notes("markdown", destination)
+    def export_json(self, destination: str | os.PathLike[str] | None = None, **filters) -> StorageOperationResult:
+        return self.export_notes("json", destination, **filters)
+
+    def export_csv(self, destination: str | os.PathLike[str] | None = None, **filters) -> StorageOperationResult:
+        return self.export_notes("csv", destination, **filters)
+
+    def export_markdown(self, destination: str | os.PathLike[str] | None = None, **filters) -> StorageOperationResult:
+        return self.export_notes("markdown", destination, **filters)
+
+    def export_zip(self, destination: str | os.PathLike[str] | None = None, **filters) -> StorageOperationResult:
+        return self.export_notes("zip", destination, **filters)
 
     def load_metadata(self, entry_id: str):
         """Load entry metadata by ID."""

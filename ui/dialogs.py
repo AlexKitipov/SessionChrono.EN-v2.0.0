@@ -338,3 +338,111 @@ class EntryDetailsDialog(tk.Toplevel):
         except Exception as exc:
             logger.exception("Failed to save entry metadata: %s", self.metadata.entry_id)
             show_error(self, "Entry Details", f"Failed to save metadata: {exc}")
+
+
+class ExportDialog(tk.Toplevel):
+    """Dialog for exporting ChronoNotes with format and filter options."""
+
+    FORMAT_CHOICES = (
+        ("Plain text (.txt)", "txt"),
+        ("JSON with metadata (.json)", "json"),
+        ("CSV summary (.csv)", "csv"),
+        ("Markdown report (.md)", "markdown"),
+        ("ZIP archive (.zip)", "zip"),
+    )
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        storage,
+        on_success: Callable[[str], None] | None = None,
+        on_error: Callable[[str], None] | None = None,
+    ):
+        super().__init__(parent)
+        self.title("Export ChronoNotes")
+        self.geometry("480x310")
+        self.configure(bg=COLOR_WINDOW_BG)
+        self.transient(parent)
+        self.storage = storage
+        self.on_success = on_success
+        self.on_error = on_error
+        self.format_var = tk.StringVar(value=self.FORMAT_CHOICES[0][0])
+        self.category_var = tk.StringVar()
+        self.date_from_var = tk.StringVar()
+        self.date_to_var = tk.StringVar()
+        exports_dir = getattr(storage, "exports_dir", "")
+        self.destination_var = tk.StringVar(value=str(exports_dir))
+        self._build_body()
+
+    def _build_body(self) -> None:
+        frame = ttk.Frame(self, padding=12)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Export Format:").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        format_menu = ttk.OptionMenu(
+            frame,
+            self.format_var,
+            self.format_var.get(),
+            *(label for label, _value in self.FORMAT_CHOICES),
+            command=lambda _choice: self._refresh_destination_hint(),
+        )
+        format_menu.grid(row=0, column=1, sticky="ew", pady=4)
+
+        ttk.Label(frame, text="Category:").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Entry(frame, textvariable=self.category_var).grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Label(frame, text="Leave blank to include all categories.").grid(row=2, column=1, sticky="w")
+
+        ttk.Label(frame, text="From date:").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=(12, 4))
+        ttk.Entry(frame, textvariable=self.date_from_var).grid(row=3, column=1, sticky="ew", pady=(12, 4))
+        ttk.Label(frame, text="Use YYYY-MM-DD. Leave blank for no start date.").grid(row=4, column=1, sticky="w")
+
+        ttk.Label(frame, text="To date:").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=(12, 4))
+        ttk.Entry(frame, textvariable=self.date_to_var).grid(row=5, column=1, sticky="ew", pady=(12, 4))
+        ttk.Label(frame, text="Use YYYY-MM-DD. Leave blank for no end date.").grid(row=6, column=1, sticky="w")
+
+        ttk.Label(frame, text="Destination:").grid(row=7, column=0, sticky="w", padx=(0, 8), pady=(12, 4))
+        ttk.Label(frame, textvariable=self.destination_var, wraplength=330).grid(row=7, column=1, sticky="ew", pady=(12, 4))
+
+        button_row = ttk.Frame(frame)
+        button_row.grid(row=8, column=1, sticky="e", pady=(16, 0))
+        ttk.Button(button_row, text="Export", command=self.run_export).pack(side="left", padx=(0, 6))
+        ttk.Button(button_row, text="Cancel", command=self.destroy).pack(side="left")
+
+    def _selected_format(self) -> str:
+        selected = self.format_var.get()
+        for label, value in self.FORMAT_CHOICES:
+            if label == selected:
+                return value
+        return "txt"
+
+    def _refresh_destination_hint(self) -> None:
+        exports_dir = getattr(self.storage, "exports_dir", "")
+        self.destination_var.set(str(exports_dir))
+
+    def run_export(self) -> None:
+        """Execute the export request and report the output path."""
+
+        format_name = self._selected_format()
+        filters = {
+            "date_from": self.date_from_var.get().strip(),
+            "date_to": self.date_to_var.get().strip(),
+            "category": self.category_var.get().strip(),
+        }
+        try:
+            result = self.storage.export_notes(format_name, **filters)
+            if not result.success or not result.path:
+                raise RuntimeError(result.error or result.message or "Export failed.")
+            message = f"Exported: {result.path}"
+            if self.on_success is not None:
+                self.on_success(message)
+            else:
+                show_info(self, "Export ChronoNotes", message)
+            self.destroy()
+        except Exception as exc:
+            logger.exception("ChronoNotes export failed")
+            message = f"Export failed: {exc}"
+            if self.on_error is not None:
+                self.on_error(message)
+            else:
+                show_error(self, "Export ChronoNotes", message)
