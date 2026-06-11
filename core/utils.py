@@ -1,6 +1,9 @@
 from datetime import datetime
 
 from .config import LOG_ROOT
+from .logger import get_logger
+
+logger = get_logger()
 
 def classify_text(text: str) -> str:
     t = text.strip().lower()
@@ -37,6 +40,7 @@ def build_filename(text: str):
 
     folder = LOG_ROOT / date_str / category
     folder.mkdir(parents=True, exist_ok=True)
+    logger.info("Prepared note destination: folder=%s category=%s title=%r", folder, category, short)
 
     filename = f"{category}_{short}_{date_str}_{time_str}.txt"
     full_path = folder / filename
