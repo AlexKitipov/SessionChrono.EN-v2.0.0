@@ -42,7 +42,10 @@ SessionChrono.EN-v2.0.0/
 │   └── test_storage.py
 ├── ui/
 │   ├── __init__.py
-│   └── tkinter_ui.py
+│   ├── sounds.py
+│   ├── styles.py
+│   ├── tkinter_ui.py
+│   └── widgets.py
 ├── main.py
 ├── README.md
 └── requirements.txt
@@ -97,6 +100,19 @@ The logs capture startup and shutdown, clipboard monitor lifecycle events, file 
 ---
 
 
+
+## 🖥️ UI foundation modules
+
+The Tkinter application is split into reusable UI foundation modules while preserving the existing desktop workflow:
+
+- `ui/styles.py` centralizes dark theme colors, fonts, menu styling, and ttk theme setup.
+- `ui/widgets.py` provides reusable scrollable text panes, clipboard history list, status bar, search result list, and the right-click context menu for copy/cut/paste/select-all/clear.
+- `ui/sounds.py` owns sound playback and keeps the same optional WAV behavior: if a bundled WAV file exists under the configured `sounds/` resource directory it is used on Windows, otherwise the app falls back to a winsound beep or Tk bell without crashing.
+- `ui/tkinter_ui.py` keeps `SessionChronoUI` as the main application shell and composes the shared styles, widgets, and sound manager.
+
+These modules rely on centralized configuration from `core/config.py`, so source and PyInstaller/frozen runs resolve resources consistently.
+
+---
 
 ## 💾 Storage manager
 
