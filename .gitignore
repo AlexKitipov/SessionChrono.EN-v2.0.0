@@ -17,6 +17,15 @@ ChronoNotes/
 settings/
 metadata/
 exports/
+*.log
+logs/
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
 
 # PyInstaller outputs and binary release artifacts
 build/
@@ -34,4 +43,3 @@ dist/
 # Local OS/editor files
 .DS_Store
 Thumbs.db
-*.swp

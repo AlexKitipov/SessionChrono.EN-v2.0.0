@@ -41,9 +41,11 @@ python -m core.config
 python -m pytest
 ```
 
+This repository intentionally excludes generated runtime data and packaging output. Do not commit `ChronoNotes/`, caches, logs, `build/`, `dist/`, executables, shared libraries, bytecode, manifests, or installer outputs.
+
 ## PyInstaller packaging
 
-Packaging is defined by the checked-in `sessionchrono.spec` file. Build scripts are intentionally source-only wrappers; they create local `build/` and `dist/` outputs that must not be committed.
+Packaging is defined by the checked-in `sessionchrono.spec` file. Build scripts are intentionally source-only wrappers; they create local `build/` and `dist/` outputs that must not be committed. Release-candidate PRs should update only source-controlled text files and metadata; run PyInstaller locally only when producing release artifacts outside the PR diff.
 
 Windows:
 
@@ -113,8 +115,8 @@ SessionChrono.EN-v2.0.0/
 ├── core/                 # Business logic, persistence, classification, exports, paths
 ├── ui/                   # Tkinter windows, dialogs, widgets, styles, sounds
 ├── tests/                # Unit/integration tests for core behavior
-├── icons/                # Bundled icon resources
-├── sounds/               # Optional bundled sound resources
+├── icons/                # Text asset policy and optional approved icon sources
+├── sounds/               # Text asset policy and optional approved sound sources
 ├── config_templates/     # Text default configuration templates for packaged builds
 ├── installer/            # Inno Setup script and Windows installer smoke checklist
 ├── sessionchrono.spec    # PyInstaller one-folder build definition
@@ -247,5 +249,5 @@ The automated suite includes import smoke checks for `main.py`, core modules, an
 - [`INSTALLATION.md`](INSTALLATION.md): source install, portable executable usage, Inno Setup build instructions, and uninstall behavior.
 - [`installer/README.md`](installer/README.md): Windows installer build flow and clean-VM smoke-test checklist.
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): project structure, boundaries, adding categories/export formats/UI, and tests.
-- [`DEPLOY.md`](DEPLOY.md): release checklist for version checks, clean builds, PyInstaller, installer creation, smoke tests, tags, and GitHub releases.
-- [`CHANGELOG.md`](CHANGELOG.md): v2.0.0 release-note skeleton.
+- [`DEPLOY.md`](DEPLOY.md): release checklist for version checks, source-only PR validation, clean local builds, PyInstaller, installer creation, smoke tests, tags, and GitHub releases.
+- [`CHANGELOG.md`](CHANGELOG.md): v2.0.0 release-candidate notes.

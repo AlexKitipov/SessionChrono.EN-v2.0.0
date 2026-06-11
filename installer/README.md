@@ -1,6 +1,6 @@
 # SessionChrono Windows Installer
 
-This directory contains the Inno Setup packaging script for SessionChrono v2.0.0. It wraps the PyInstaller one-folder output from `dist/SessionChrono/` into a Windows installer with Start Menu shortcuts, an optional desktop shortcut, and standard uninstall registration.
+This directory contains the text-only Inno Setup packaging script for SessionChrono v2.0.0. It wraps the PyInstaller one-folder output from `dist/SessionChrono/` into a Windows installer with Start Menu shortcuts, an optional desktop shortcut, and standard uninstall registration. Source-only PRs should update this script and documentation only; generated installer binaries are produced later in the release environment.
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ The expected installer output is:
 dist\installer\SessionChrono-2.0.0-Setup.exe
 ```
 
-Do not commit `build/`, `dist/`, generated executables, DLLs, PYDs, manifests, or other build artifacts. Attach release binaries to a GitHub release instead.
+Do not commit `build/`, `dist/`, generated executables, DLLs, PYDs, manifests, bytecode, logs, caches, runtime data, or other build artifacts. Attach release binaries to a GitHub release instead.
 
 ## Uninstall and user data behavior
 
