@@ -363,7 +363,7 @@ class EntryDetailsDialog(tk.Toplevel):
         path: str,
         content: str,
         metadata: EntryMetadata | None = None,
-        on_save: Callable[[EntryMetadata, list[str], str], EntryMetadata] | None = None,
+        on_save: Callable[[EntryMetadata | None, str, str, list[str], str], EntryMetadata] | None = None,
     ):
         super().__init__(parent)
         self.title("Entry Details")
@@ -371,7 +371,10 @@ class EntryDetailsDialog(tk.Toplevel):
         self.configure(bg=COLOR_WINDOW_BG)
         self.transient(parent)
         self.metadata = metadata
+        self.path = path
+        self.content = content
         self.on_save = on_save
+        self.can_edit_metadata = bool(path)
         self.tags_var = tk.StringVar(value=", ".join(metadata.user_tags) if metadata else "")
         self.note_text: tk.Text | None = None
         self._build_body(title=title, path=path, content=content)
@@ -400,7 +403,12 @@ class EntryDetailsDialog(tk.Toplevel):
                 ]
             )
         else:
-            details.append(("Metadata", "No sidecar metadata found for this entry."))
+            details.append((
+                "Metadata",
+                "No sidecar metadata found; saving details will create one."
+                if self.can_edit_metadata
+                else "Unsaved editor content has no file path for metadata.",
+            ))
 
         for row, (label, value) in enumerate(details):
             ttk.Label(frame, text=f"{label}:").grid(row=row, column=0, sticky="nw", padx=(0, 8), pady=2)
@@ -408,7 +416,11 @@ class EntryDetailsDialog(tk.Toplevel):
 
         edit_row = len(details)
         ttk.Label(frame, text="Tags:").grid(row=edit_row, column=0, sticky="nw", padx=(0, 8), pady=(10, 2))
-        tags_entry = ttk.Entry(frame, textvariable=self.tags_var, state="normal" if metadata else "disabled")
+        tags_entry = ttk.Entry(
+            frame,
+            textvariable=self.tags_var,
+            state="normal" if self.can_edit_metadata else "disabled",
+        )
         tags_entry.grid(row=edit_row, column=1, sticky="ew", pady=(10, 2))
         ttk.Label(frame, text="Use commas to separate tags.").grid(row=edit_row + 1, column=1, sticky="w")
 
@@ -416,7 +428,7 @@ class EntryDetailsDialog(tk.Toplevel):
         self.note_text = tk.Text(frame, height=5, wrap="word")
         self.note_text.grid(row=edit_row + 2, column=1, sticky="nsew", pady=(8, 2))
         self.note_text.insert("1.0", metadata.note if metadata else "")
-        if not metadata:
+        if not self.can_edit_metadata:
             self.note_text.configure(state="disabled")
         frame.rowconfigure(edit_row + 2, weight=1)
 
@@ -426,22 +438,25 @@ class EntryDetailsDialog(tk.Toplevel):
             button_row,
             text="Save Metadata",
             command=self.save_metadata,
-            state="normal" if metadata else "disabled",
+            state="normal" if self.can_edit_metadata else "disabled",
         ).pack(side="left", padx=(0, 6))
         ttk.Button(button_row, text="Close", command=self.destroy).pack(side="left")
 
     def save_metadata(self) -> None:
         """Persist editable tags and annotation through the provided callback."""
 
-        if not self.metadata or self.on_save is None or self.note_text is None:
+        if not self.can_edit_metadata or self.on_save is None or self.note_text is None:
             return
         tags = [part.strip() for part in self.tags_var.get().split(",") if part.strip()]
         note = self.note_text.get("1.0", "end").strip()
         try:
-            self.metadata = self.on_save(self.metadata, tags, note)
+            self.metadata = self.on_save(self.metadata, self.path, self.content, tags, note)
             show_info(self, "Entry Details", "Metadata saved.")
         except Exception as exc:
-            logger.exception("Failed to save entry metadata: %s", self.metadata.entry_id)
+            logger.exception(
+                "Failed to save entry metadata: %s",
+                self.metadata.entry_id if self.metadata else self.path,
+            )
             show_error(self, "Entry Details", f"Failed to save metadata: {exc}")
 
 

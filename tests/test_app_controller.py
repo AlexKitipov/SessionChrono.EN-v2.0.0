@@ -115,6 +115,26 @@ class ApplicationControllerTests(unittest.TestCase):
         self.assertEqual(metadata.category, "NOTE")
         self.assertEqual(metadata.text_length, len("remember this"))
 
+    def test_controller_upsert_metadata_for_path_creates_missing_sidecar(self):
+        controller = self.make_controller()
+        result = controller.save_text("2026-06-11/NOTE/editor-note.txt", "editor note")
+
+        record = controller.upsert_metadata_for_path(
+            result.path,
+            "editor note",
+            user_tags=["details"],
+            note="from entry details",
+        )
+
+        loaded = controller.load_metadata_by_path(result.path)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.entry_id, record.entry_id)
+        self.assertEqual(loaded.category, "NOTE")
+        self.assertEqual(loaded.title, "[NOTE] editor-note")
+        self.assertEqual(loaded.text_length, len("editor note"))
+        self.assertEqual(loaded.user_tags, ["details"])
+        self.assertEqual(loaded.note, "from entry details")
+
     def test_clipboard_text_is_ignored_when_paused(self):
         controller = self.make_controller()
 

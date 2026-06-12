@@ -294,6 +294,7 @@ class SessionChronoUI(tk.Tk):
             result = self.controller.save_text(self.current_file_path, content)
             if not result.success:
                 raise RuntimeError(result.error or result.message)
+            self.ensure_editor_metadata(self.current_file_path, content)
             self.status_var.set(f"Saved: {os.path.basename(self.current_file_path)}")
             self.sound.play("save")
         except Exception as e:
@@ -315,6 +316,7 @@ class SessionChronoUI(tk.Tk):
             if not result.success:
                 raise RuntimeError(result.error or result.message)
             self.current_file_path = path
+            self.ensure_editor_metadata(path, content)
             self.status_var.set(f"Saved As: {os.path.basename(path)}")
             self.sound.play("save")
         except Exception as e:
@@ -454,8 +456,26 @@ class SessionChronoUI(tk.Tk):
             on_save=self.save_entry_metadata,
         )
 
-    def save_entry_metadata(self, metadata, tags: list[str], note: str):
-        updated = self.controller.update_metadata(metadata.entry_id, user_tags=tags, note=note)
+    def ensure_editor_metadata(self, path: str | None, content: str):
+        """Create metadata for a saved editor file if its sidecar is missing."""
+
+        if not path:
+            return None
+        metadata = self.controller.load_metadata_by_path(path)
+        if metadata is not None:
+            return metadata
+        return self.controller.upsert_metadata_for_path(path, content)
+
+    def save_entry_metadata(self, metadata, path: str, content: str, tags: list[str], note: str):
+        if metadata is None:
+            updated = self.controller.upsert_metadata_for_path(path, content, user_tags=tags, note=note)
+        else:
+            updated = self.controller.update_metadata(
+                metadata.entry_id,
+                user_tags=tags,
+                note=note,
+                text_length=len(content),
+            )
         self.status_var.set("Entry metadata saved.")
         self.sound.play("save")
         return updated
