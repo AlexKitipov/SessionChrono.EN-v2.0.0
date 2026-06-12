@@ -8,6 +8,7 @@ state and collecting user input.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from threading import RLock
 from typing import Callable, Protocol
@@ -327,8 +328,24 @@ class ApplicationController:
     def export_notes(self, format_name: str, destination: str | Path | None = None, **filters) -> StorageOperationResult:
         return self.storage.export_notes(format_name, destination, **filters)
 
-    def search_logs(self, query: str) -> list[SearchResult]:
-        return self.storage.search_logs(query)
+    def search_logs(
+        self,
+        query: str = "",
+        *,
+        category: str | None = None,
+        date_from: date | datetime | str | None = None,
+        date_to: date | datetime | str | None = None,
+        tag: str | None = None,
+        filename: str | None = None,
+    ) -> list[SearchResult]:
+        return self.storage.search_logs(
+            query,
+            category=category,
+            date_from=date_from,
+            date_to=date_to,
+            tag=tag,
+            filename=filename,
+        )
 
     def load_metadata_by_path(self, path: str | Path):
         return self.storage.load_metadata_by_path(path)

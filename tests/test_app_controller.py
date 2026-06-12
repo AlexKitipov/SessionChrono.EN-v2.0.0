@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 from core.app_controller import ApplicationController
 from core.storage import StorageManager
+from ui.dialogs import SearchDialog
 
 
 class FakeMonitor:
@@ -30,6 +31,38 @@ class FakeMonitor:
 
     def is_running(self):
         return self.running
+
+
+class RecordingSearchStorage:
+    def __init__(self):
+        self.base_dir = Path("/tmp/recording-search-storage")
+        self.search_calls = []
+
+    def search_logs(self, query="", **filters):
+        self.search_calls.append((query, filters))
+        return []
+
+    def load_text(self, path):
+        return None
+
+
+class FakeSearchVariable:
+    def __init__(self, value=""):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+class FakeSearchResultsList:
+    def __init__(self):
+        self.results = None
+
+    def set_results(self, results):
+        self.results = results
 
 
 class ApplicationControllerTests(unittest.TestCase):
@@ -100,6 +133,74 @@ class ApplicationControllerTests(unittest.TestCase):
         controller.handle_clipboard_text("third")
 
         self.assertEqual([entry.text for entry in controller.history], ["third", "second"])
+
+    def test_search_logs_forwards_structured_filters(self):
+        storage = RecordingSearchStorage()
+        controller = ApplicationController(storage=storage, monitor_factory=FakeMonitor)
+
+        results = controller.search_logs(
+            "needle",
+            category="NOTE",
+            date_from="2026-06-10",
+            date_to="2026-06-11",
+            tag="project",
+            filename="alpha-note",
+        )
+
+        self.assertEqual(results, [])
+        self.assertEqual(
+            storage.search_calls,
+            [
+                (
+                    "needle",
+                    {
+                        "category": "NOTE",
+                        "date_from": "2026-06-10",
+                        "date_to": "2026-06-11",
+                        "tag": "project",
+                        "filename": "alpha-note",
+                    },
+                )
+            ],
+        )
+
+    def test_controller_satisfies_search_dialog_provider_contract(self):
+        storage = RecordingSearchStorage()
+        controller = ApplicationController(storage=storage, monitor_factory=FakeMonitor)
+        dialog = SearchDialog.__new__(SearchDialog)
+        dialog.storage = controller
+        dialog.results_list = FakeSearchResultsList()
+        dialog.query_var = FakeSearchVariable("needle")
+        dialog.category_var = FakeSearchVariable("NOTE")
+        dialog.date_from_var = FakeSearchVariable("2026-06-10")
+        dialog.date_to_var = FakeSearchVariable("2026-06-11")
+        dialog.tag_var = FakeSearchVariable("project")
+        dialog.filename_var = FakeSearchVariable("alpha-note")
+        dialog.summary_var = FakeSearchVariable()
+        dialog.matches = []
+        dialog.on_error = None
+
+        dialog.run_search()
+
+        self.assertTrue(callable(controller.load_text))
+        self.assertEqual(dialog.matches, [])
+        self.assertEqual(dialog.results_list.results, [])
+        self.assertEqual(dialog.summary_var.get(), "0 match(es) found.")
+        self.assertEqual(
+            storage.search_calls,
+            [
+                (
+                    "needle",
+                    {
+                        "category": "NOTE",
+                        "date_from": "2026-06-10",
+                        "date_to": "2026-06-11",
+                        "tag": "project",
+                        "filename": "alpha-note",
+                    },
+                )
+            ],
+        )
 
 
 if __name__ == "__main__":
