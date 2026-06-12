@@ -322,6 +322,12 @@ class ApplicationController:
     def save_text(self, path: str | Path, text: str) -> StorageOperationResult:
         return self.storage.save_text(path, text)
 
+    def upsert_metadata_for_path(self, path: str | Path, content: str = "", **fields):
+        """Update or create metadata for a saved text file path."""
+
+        metadata_fields = self._metadata_fields_for_path(path, content, **fields)
+        return self.storage.upsert_metadata_for_path(path, **metadata_fields)
+
     def create_today_zip(self) -> StorageOperationResult:
         return self.storage.create_today_zip()
 
@@ -355,6 +361,33 @@ class ApplicationController:
 
     def search_metadata(self, query: str = "", *, tags=None):
         return self.storage.search_metadata(query, tags=tags)
+
+    def _metadata_fields_for_path(self, path: str | Path, content: str = "", **fields):
+        resolved = self.storage.resolve_path(path)
+        short_title = fields.pop("short_title", None) or resolved.stem
+        category = fields.pop("category", None) or self._category_from_path(resolved, content)
+        title = fields.pop("title", None) or f"[{category}] {short_title}"
+        text_length = fields.pop("text_length", None)
+        if text_length is None:
+            text_length = len(content)
+        classifier_confidence = fields.pop("classifier_confidence", None)
+        if classifier_confidence is None:
+            classifier_confidence = classify_text_with_confidence(content)[1] if content else 0.0
+        return {
+            "category": category,
+            "title": title,
+            "short_title": short_title,
+            "text_length": text_length,
+            "classifier_confidence": classifier_confidence,
+            **fields,
+        }
+
+    @staticmethod
+    def _category_from_path(path: Path, content: str = "") -> str:
+        parent_name = path.parent.name.strip()
+        if parent_name.isupper() and parent_name.replace("_", "").isalpha():
+            return parent_name
+        return classify_text_with_confidence(content)[0] if content else "NOTE"
 
     def _notify_monitoring_changed(self, active: bool) -> None:
         if self.on_monitoring_changed:

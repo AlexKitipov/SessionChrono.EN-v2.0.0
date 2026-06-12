@@ -99,6 +99,43 @@ class MetadataManagerTests(unittest.TestCase):
         self.assertEqual(updated.user_tags, ["stored"])
         self.assertEqual([item.metadata.entry_id for item in results], [record.entry_id])
 
+    def test_storage_upsert_metadata_for_path_creates_missing_sidecar(self):
+        storage = StorageManager(self.root / "ChronoNotes", self.root / "exports")
+        result = storage.save_text("2026-06-11/NOTE/missing-sidecar.txt", "missing sidecar")
+
+        record = storage.upsert_metadata_for_path(
+            result.path,
+            category="NOTE",
+            title="[NOTE] missing-sidecar",
+            short_title="missing-sidecar",
+            text_length=len("missing sidecar"),
+            user_tags=["editor"],
+            note="created from details",
+        )
+
+        loaded = storage.load_metadata_by_path(result.path)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.entry_id, record.entry_id)
+        self.assertEqual(loaded.user_tags, ["editor"])
+        self.assertEqual(loaded.note, "created from details")
+
+    def test_storage_upsert_metadata_for_path_updates_existing_sidecar(self):
+        storage = StorageManager(self.root / "ChronoNotes", self.root / "exports")
+        result = storage.save_text("2026-06-11/NOTE/existing-sidecar.txt", "existing sidecar")
+        record = storage.upsert_metadata_for_path(
+            result.path,
+            category="NOTE",
+            title="[NOTE] existing-sidecar",
+            short_title="existing-sidecar",
+            text_length=len("existing sidecar"),
+        )
+
+        updated = storage.upsert_metadata_for_path(result.path, user_tags=["updated"], note="revised")
+
+        self.assertEqual(updated.entry_id, record.entry_id)
+        self.assertEqual(updated.user_tags, ["updated"])
+        self.assertEqual(updated.note, "revised")
+
 
 if __name__ == "__main__":
     unittest.main()

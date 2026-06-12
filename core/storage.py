@@ -530,6 +530,11 @@ class StorageManager:
 
         return self.metadata.update_metadata(entry_id, **fields)
 
+    def upsert_metadata_for_path(self, path: str | os.PathLike[str], **fields):
+        """Update metadata for a text path, creating a sidecar when missing."""
+
+        return self.metadata.upsert_for_path(self.resolve_path(path), **fields)
+
     def search_metadata(self, query: str = "", **filters):
         """Search entry metadata fields and structured filters."""
 
