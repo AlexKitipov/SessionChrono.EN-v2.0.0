@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Callable, Protocol
 
 from core.config import APP_NAME, APP_VERSION
+from core.export import ExportFilters, default_export_filename
 from core.logger import get_logger
 from core.metadata import EntryMetadata
 from core.settings import AppSettings, DEFAULT_SOUND_EVENTS, SUPPORTED_THEMES
@@ -480,7 +481,7 @@ class ExportDialog(tk.Toplevel):
     ):
         super().__init__(parent)
         self.title("Export ChronoNotes")
-        self.geometry("480x310")
+        self.geometry("560x350")
         self.configure(bg=COLOR_WINDOW_BG)
         self.transient(parent)
         self.storage = storage
@@ -490,8 +491,7 @@ class ExportDialog(tk.Toplevel):
         self.category_var = tk.StringVar()
         self.date_from_var = tk.StringVar()
         self.date_to_var = tk.StringVar()
-        exports_dir = getattr(storage, "exports_dir", "")
-        self.destination_var = tk.StringVar(value=str(exports_dir))
+        self.destination_var = tk.StringVar()
         self._build_body()
 
     def _build_body(self) -> None:
@@ -522,10 +522,22 @@ class ExportDialog(tk.Toplevel):
         ttk.Label(frame, text="Use YYYY-MM-DD. Leave blank for no end date.").grid(row=6, column=1, sticky="w")
 
         ttk.Label(frame, text="Destination:").grid(row=7, column=0, sticky="w", padx=(0, 8), pady=(12, 4))
-        ttk.Label(frame, textvariable=self.destination_var, wraplength=330).grid(row=7, column=1, sticky="ew", pady=(12, 4))
+        destination_row = ttk.Frame(frame)
+        destination_row.grid(row=7, column=1, sticky="ew", pady=(12, 4))
+        destination_row.columnconfigure(0, weight=1)
+        ttk.Entry(destination_row, textvariable=self.destination_var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(destination_row, text="Browse/Save As...", command=self.choose_destination).grid(
+            row=0,
+            column=1,
+            padx=(6, 0),
+        )
+        ttk.Label(
+            frame,
+            text="Leave blank to export to the default exports folder with an automatic filename.",
+        ).grid(row=8, column=1, sticky="w")
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=8, column=1, sticky="e", pady=(16, 0))
+        button_row.grid(row=9, column=1, sticky="e", pady=(16, 0))
         ttk.Button(button_row, text="Export", command=self.run_export).pack(side="left", padx=(0, 6))
         ttk.Button(button_row, text="Cancel", command=self.destroy).pack(side="left")
 
@@ -537,20 +549,71 @@ class ExportDialog(tk.Toplevel):
         return "txt"
 
     def _refresh_destination_hint(self) -> None:
-        exports_dir = getattr(self.storage, "exports_dir", "")
-        self.destination_var.set(str(exports_dir))
+        destination = self.destination_var.get().strip()
+        if not destination:
+            return
+        path = os.fspath(destination)
+        root, _extension = os.path.splitext(path)
+        self.destination_var.set(f"{root}{self._default_extension(self._selected_format())}")
+
+    def _export_filters(self) -> dict[str, str]:
+        return {
+            "date_from": self.date_from_var.get().strip(),
+            "date_to": self.date_to_var.get().strip(),
+            "category": self.category_var.get().strip(),
+        }
+
+    @staticmethod
+    def _default_extension(format_name: str) -> str:
+        return ".md" if format_name == "markdown" else f".{format_name}"
+
+    @classmethod
+    def _filetypes_for_format(cls, format_name: str) -> list[tuple[str, str]]:
+        labels = {
+            "txt": "Plain text",
+            "json": "JSON",
+            "csv": "CSV",
+            "markdown": "Markdown",
+            "zip": "ZIP archive",
+        }
+        extension = cls._default_extension(format_name)
+        return [(labels.get(format_name, "Export file"), f"*{extension}"), ("All files", "*.*")]
+
+    def _suggested_export_filename(self, format_name: str, filters: dict[str, str] | None = None) -> str:
+        filters = filters or self._export_filters()
+        return default_export_filename(format_name, ExportFilters(**filters))
+
+    def choose_destination(self) -> None:
+        """Prompt for the export destination path with a format-appropriate extension."""
+
+        format_name = self._selected_format()
+        filters = self._export_filters()
+        current_destination = self.destination_var.get().strip()
+        initial_dir = getattr(self.storage, "exports_dir", "") or None
+        initial_file = self._suggested_export_filename(format_name, filters)
+        if current_destination:
+            current_path = os.path.expanduser(current_destination)
+            initial_dir = os.path.dirname(current_path) or initial_dir
+            initial_file = os.path.basename(current_path) or initial_file
+        selected = filedialog.asksaveasfilename(
+            parent=self,
+            title="Choose export destination",
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            defaultextension=self._default_extension(format_name),
+            filetypes=self._filetypes_for_format(format_name),
+        )
+        if selected:
+            self.destination_var.set(selected)
 
     def run_export(self) -> None:
         """Execute the export request and report the output path."""
 
         format_name = self._selected_format()
-        filters = {
-            "date_from": self.date_from_var.get().strip(),
-            "date_to": self.date_to_var.get().strip(),
-            "category": self.category_var.get().strip(),
-        }
+        filters = self._export_filters()
+        destination = self.destination_var.get().strip()
         try:
-            result = self.storage.export_notes(format_name, **filters)
+            result = self.storage.export_notes(format_name, destination, **filters)
             if not result.success or not result.path:
                 raise RuntimeError(result.error or result.message or "Export failed.")
             message = f"Exported: {result.path}"

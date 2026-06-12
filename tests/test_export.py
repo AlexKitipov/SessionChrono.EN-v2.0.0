@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from core.storage import StorageManager
+from ui.dialogs import ExportDialog
 
 
 class ExportServiceTests(unittest.TestCase):
@@ -101,6 +102,29 @@ class ExportServiceTests(unittest.TestCase):
             self.assertIn(f"metadata/{self.note_meta.entry_id}.json", names)
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
         self.assertEqual(manifest["entry_count"], 2)
+
+    def test_export_notes_accepts_blank_destination_for_default_exports_dir(self):
+        result = self.storage.export_notes("json", "")
+
+        self.assertTrue(result.success, result.error)
+        self.assertTrue(str(result.path).startswith(str(self.exports_dir)))
+        self.assertEqual(Path(result.path).suffix, ".json")
+
+    def test_export_notes_writes_selected_absolute_destination(self):
+        destination = self.root / "chosen" / "manual.csv"
+
+        result = self.storage.export_notes("csv", destination)
+
+        self.assertTrue(result.success, result.error)
+        self.assertEqual(Path(result.path), destination.resolve())
+        self.assertTrue(destination.exists())
+
+    def test_export_dialog_uses_format_specific_default_extensions(self):
+        self.assertEqual(ExportDialog._default_extension("txt"), ".txt")
+        self.assertEqual(ExportDialog._default_extension("json"), ".json")
+        self.assertEqual(ExportDialog._default_extension("csv"), ".csv")
+        self.assertEqual(ExportDialog._default_extension("markdown"), ".md")
+        self.assertEqual(ExportDialog._default_extension("zip"), ".zip")
 
     def test_create_today_zip_routes_through_export_service(self):
         result = self.storage.create_today_zip(target_date=date(2026, 6, 11))
