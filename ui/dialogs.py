@@ -11,7 +11,20 @@ from core.config import APP_NAME, APP_VERSION
 from core.export import ExportFilters, default_export_filename
 from core.logger import get_logger
 from core.metadata import EntryMetadata
-from core.settings import AppSettings, DEFAULT_SOUND_EVENTS, SUPPORTED_THEMES
+from core.settings import (
+    AppSettings,
+    DEFAULT_SOUND_EVENTS,
+    MAX_HISTORY_ENTRIES,
+    MAX_POLL_INTERVAL_SECONDS,
+    MAX_SOUND_VOLUME,
+    MIN_HISTORY_ENTRIES,
+    MIN_POLL_INTERVAL_SECONDS,
+    MIN_SOUND_VOLUME,
+    SUPPORTED_THEMES,
+    parse_history_limit,
+    parse_poll_interval,
+    parse_sound_volume,
+)
 from core.storage import SearchResult
 from ui.styles import COLOR_WINDOW_BG, DIALOG_GEOMETRIES
 from ui.widgets import SearchResultsList
@@ -273,18 +286,34 @@ class SettingsDialog(tk.Toplevel):
 
         ttk.Label(frame, text="Clipboard polling interval (seconds):").grid(row=2, column=0, sticky="w", pady=3)
         ttk.Entry(frame, textvariable=self.poll_interval_var, width=10).grid(row=2, column=1, sticky="w", pady=3)
+        ttk.Label(
+            frame,
+            text=f"Valid range: {MIN_POLL_INTERVAL_SECONDS:g}-{MAX_POLL_INTERVAL_SECONDS:g} seconds",
+        ).grid(row=2, column=2, sticky="w", padx=(6, 0), pady=3)
 
         ttk.Label(frame, text="Maximum in-session history entries:").grid(row=3, column=0, sticky="w", pady=3)
         ttk.Entry(frame, textvariable=self.history_limit_var, width=10).grid(row=3, column=1, sticky="w", pady=3)
+        ttk.Label(
+            frame,
+            text=f"Valid range: {MIN_HISTORY_ENTRIES}-{MAX_HISTORY_ENTRIES} entries",
+        ).grid(row=3, column=2, sticky="w", padx=(6, 0), pady=3)
 
         ttk.Separator(frame).grid(row=4, column=0, columnspan=3, sticky="ew", pady=8)
         ttk.Checkbutton(frame, text="Enable sounds", variable=self.sound_enabled_var).grid(
             row=5, column=0, columnspan=3, sticky="w", pady=3
         )
         ttk.Label(frame, text="Sound volume:").grid(row=6, column=0, sticky="w", pady=3)
-        ttk.Scale(frame, from_=0, to=100, variable=self.sound_volume_var, orient="horizontal").grid(
-            row=6, column=1, sticky="ew", pady=3
-        )
+        ttk.Scale(
+            frame,
+            from_=MIN_SOUND_VOLUME,
+            to=MAX_SOUND_VOLUME,
+            variable=self.sound_volume_var,
+            orient="horizontal",
+        ).grid(row=6, column=1, sticky="ew", pady=3)
+        ttk.Label(
+            frame,
+            text=f"Valid range: {MIN_SOUND_VOLUME}-{MAX_SOUND_VOLUME}",
+        ).grid(row=6, column=2, sticky="w", padx=(6, 0), pady=3)
         ttk.Label(frame, text="Event sounds:").grid(row=7, column=0, sticky="nw", pady=3)
         events_frame = ttk.Frame(frame)
         events_frame.grid(row=7, column=1, columnspan=2, sticky="w", pady=3)
@@ -334,15 +363,18 @@ class SettingsDialog(tk.Toplevel):
         try:
             settings = self.settings.with_updates(
                 start_monitoring_on_launch=self.start_monitoring_var.get(),
-                clipboard_poll_interval=float(self.poll_interval_var.get()),
-                max_history_entries=int(self.history_limit_var.get()),
+                clipboard_poll_interval=parse_poll_interval(self.poll_interval_var.get()),
+                max_history_entries=parse_history_limit(self.history_limit_var.get()),
                 sound_enabled=self.sound_enabled_var.get(),
-                sound_volume=int(round(self.sound_volume_var.get())),
+                sound_volume=parse_sound_volume(self.sound_volume_var.get()),
                 sound_events={event: variable.get() for event, variable in self.event_vars.items()},
                 default_export_directory=self.export_dir_var.get(),
                 data_directory=self.data_dir_var.get(),
                 theme=self.theme_var.get(),
             )
+            self.poll_interval_var.set(str(settings.clipboard_poll_interval))
+            self.history_limit_var.set(str(settings.max_history_entries))
+            self.sound_volume_var.set(settings.sound_volume)
             if self.on_save is not None:
                 settings = self.on_save(settings, self.migrate_data_var.get())
             self.settings = settings
@@ -350,7 +382,8 @@ class SettingsDialog(tk.Toplevel):
             self.destroy()
         except Exception as exc:
             logger.exception("Failed to save settings")
-            show_error(self, "Settings", f"Failed to save settings: {exc}")
+            message = str(exc) if isinstance(exc, ValueError) else f"Failed to save settings: {exc}"
+            show_error(self, "Settings", message)
 
 
 class EntryDetailsDialog(tk.Toplevel):

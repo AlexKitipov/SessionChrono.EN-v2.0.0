@@ -7,10 +7,16 @@ from core.settings import (
     AppSettings,
     MAX_HISTORY_ENTRIES,
     MAX_POLL_INTERVAL_SECONDS,
+    MAX_SOUND_VOLUME,
     MIN_HISTORY_ENTRIES,
     MIN_POLL_INTERVAL_SECONDS,
+    MIN_SOUND_VOLUME,
+    data_directory_migration_required,
     load_settings,
     migrate_data_directory,
+    parse_history_limit,
+    parse_poll_interval,
+    parse_sound_volume,
     save_settings,
 )
 
@@ -97,6 +103,28 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.max_history_entries, MAX_HISTORY_ENTRIES)
 
+    def test_setting_parsers_clamp_valid_numeric_text(self):
+        self.assertEqual(parse_poll_interval("999"), MAX_POLL_INTERVAL_SECONDS)
+        self.assertEqual(parse_poll_interval("0.001"), MIN_POLL_INTERVAL_SECONDS)
+        self.assertEqual(parse_history_limit("9999"), MAX_HISTORY_ENTRIES)
+        self.assertEqual(parse_history_limit("-2"), MIN_HISTORY_ENTRIES)
+        self.assertEqual(parse_sound_volume("150"), MAX_SOUND_VOLUME)
+        self.assertEqual(parse_sound_volume("-1"), MIN_SOUND_VOLUME)
+        self.assertEqual(parse_sound_volume("40.6"), 41)
+
+    def test_setting_parsers_report_field_specific_invalid_text(self):
+        with self.assertRaisesRegex(ValueError, "Clipboard polling interval"):
+            parse_poll_interval("fast")
+        with self.assertRaisesRegex(ValueError, "history entries"):
+            parse_history_limit("many")
+        with self.assertRaisesRegex(ValueError, "Sound volume"):
+            parse_sound_volume("loud")
+
+    def test_setting_parsers_use_defaults_for_invalid_persisted_values(self):
+        self.assertEqual(parse_poll_interval("fast", default=1.25), 1.25)
+        self.assertEqual(parse_history_limit("many", default=25), 25)
+        self.assertEqual(parse_sound_volume("loud", default=75), 75)
+
     def test_migrate_data_directory_copies_existing_notes_without_deleting_source(self):
         source = Path(self.tmp.name) / "old" / "ChronoNotes"
         destination = Path(self.tmp.name) / "new" / "ChronoNotes"
@@ -104,10 +132,21 @@ class SettingsTests(unittest.TestCase):
         note.parent.mkdir(parents=True)
         note.write_text("remember this", encoding="utf-8")
 
+        self.assertTrue(data_directory_migration_required(source, destination))
+
         migrate_data_directory(source, destination)
 
         self.assertEqual((destination / "2026-06-11" / "NOTE" / "one.txt").read_text(encoding="utf-8"), "remember this")
         self.assertTrue(note.exists())
+
+    def test_data_directory_migration_is_explicitly_skipped_for_missing_or_same_source(self):
+        source = Path(self.tmp.name) / "missing"
+        destination = Path(self.tmp.name) / "new" / "ChronoNotes"
+
+        self.assertFalse(data_directory_migration_required(source, destination))
+        migrate_data_directory(source, destination)
+        self.assertTrue(destination.exists())
+        self.assertFalse(data_directory_migration_required(destination, destination))
 
 
 if __name__ == "__main__":
