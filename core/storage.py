@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import EXPORTS_DIR, LOG_ROOT, METADATA_DIR
-from .export import ChronoNotesExporter, ExportFilters, default_export_filename, normalize_export_format
+from .export import ChronoNotesExporter, ExportFilters, coerce_export_datetime, default_export_filename, normalize_export_format
 from .logger import get_logger
 from .metadata import EntryMetadata, MetadataManager
 
@@ -194,8 +194,8 @@ class StorageManager:
         normalized_filename = (filename or "").strip().casefold()
         normalized_category = (category or "").strip().casefold()
         normalized_tag = (tag or "").strip().casefold()
-        start_dt = self._coerce_search_datetime(date_from, end_of_day=False)
-        end_dt = self._coerce_search_datetime(date_to, end_of_day=True)
+        start_dt = self._coerce_search_datetime(date_from, end_of_day=False, field_name="from date")
+        end_dt = self._coerce_search_datetime(date_to, end_of_day=True, field_name="to date")
 
         matches: dict[str, SearchResult] = {}
         metadata_by_path = {
@@ -400,7 +400,9 @@ class StorageManager:
             return None
 
     @staticmethod
-    def _coerce_search_datetime(value: date | datetime | str | None, *, end_of_day: bool) -> datetime | None:
+    def _coerce_search_datetime(
+        value: date | datetime | str | None, *, end_of_day: bool, field_name: str = "date"
+    ) -> datetime | None:
         if value in (None, ""):
             return None
         if isinstance(value, datetime):
@@ -418,7 +420,7 @@ class StorageManager:
         except ValueError:
             parsed_dt = StorageManager._parse_datetime(text)
             if parsed_dt is None:
-                raise ValueError(f"Invalid search date: {value!r}. Use YYYY-MM-DD.")
+                raise ValueError(f"Invalid {field_name}: {value!r}. Use YYYY-MM-DD.")
             return parsed_dt
 
     @staticmethod
@@ -470,7 +472,11 @@ class StorageManager:
             return StorageOperationResult(False, str(destination_path), str(exc), str(exc))
 
         export_filters = filters or ExportFilters(date_from=date_from, date_to=date_to, category=category)
+        validation_error = self._validate_export_filters(export_filters)
         destination_path = self._resolve_export_destination(destination, normalized_format, export_filters)
+        if validation_error is not None:
+            logger.info("Invalid export filters for %s: %s", normalized_format, validation_error)
+            return StorageOperationResult(False, str(destination_path), validation_error, validation_error)
         custom_exporter = self._exporters.get(normalized_format)
         try:
             if reject_empty and not self.exporter.collect_items(export_filters):
@@ -486,6 +492,18 @@ class StorageManager:
         except Exception as exc:
             logger.exception("Failed to export notes as %s to %s", normalized_format, destination_path)
             return StorageOperationResult(False, str(destination_path), "Failed to export notes.", str(exc))
+
+    @staticmethod
+    def _validate_export_filters(filters: ExportFilters) -> str | None:
+        for value, field_name, end_of_day in (
+            (filters.date_from, "from date", False),
+            (filters.date_to, "to date", True),
+        ):
+            try:
+                coerce_export_datetime(value, end_of_day=end_of_day)
+            except ValueError:
+                return f"Invalid {field_name}: {value!r}. Use YYYY-MM-DD."
+        return None
 
     def _resolve_export_destination(
         self,

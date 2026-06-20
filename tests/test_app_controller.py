@@ -222,6 +222,28 @@ class ApplicationControllerTests(unittest.TestCase):
             ],
         )
 
+    def test_search_dialog_rejects_invalid_from_date_before_storage_call(self):
+        errors = []
+        storage = RecordingSearchStorage()
+        dialog = SearchDialog.__new__(SearchDialog)
+        dialog.storage = storage
+        dialog.results_list = FakeSearchResultsList()
+        dialog.query_var = FakeSearchVariable("needle")
+        dialog.category_var = FakeSearchVariable("NOTE")
+        dialog.date_from_var = FakeSearchVariable("bad-date")
+        dialog.date_to_var = FakeSearchVariable("")
+        dialog.tag_var = FakeSearchVariable("")
+        dialog.filename_var = FakeSearchVariable("")
+        dialog.summary_var = FakeSearchVariable()
+        dialog.matches = []
+        dialog.on_error = errors.append
+
+        dialog.run_search()
+
+        self.assertEqual(errors, ["Invalid from date: 'bad-date'. Use YYYY-MM-DD."])
+        self.assertEqual(storage.search_calls, [])
+        self.assertEqual(dialog.summary_var.get(), "Invalid from date: 'bad-date'. Use YYYY-MM-DD.")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Callable, Protocol
@@ -56,6 +57,25 @@ def show_error(parent: tk.Misc, title: str, message: str) -> None:
     """Show a parented error message box."""
 
     messagebox.showerror(title, message, parent=parent)
+
+
+def confirm_yes_no(parent: tk.Misc, title: str, message: str) -> bool:
+    """Ask a parented yes/no question."""
+
+    return bool(messagebox.askyesno(title, message, parent=parent))
+
+
+def validate_date_filter(value: str, field_label: str) -> str | None:
+    """Return a field-specific validation message for YYYY-MM-DD date filters."""
+
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return f"Invalid {field_label}: {value!r}. Use YYYY-MM-DD."
+    return None
 
 
 def show_about(parent: tk.Misc) -> None:
@@ -113,6 +133,12 @@ class SearchDialog:
             "tag": self.tag_var.get().strip() if self.tag_var else "",
             "filename": self.filename_var.get().strip() if self.filename_var else "",
         }
+        validation_error = self._date_validation_error(filters)
+        if validation_error is not None:
+            self._report_error(validation_error)
+            if self.summary_var is not None:
+                self.summary_var.set(validation_error)
+            return
         try:
             self.matches = self.storage.search_logs(query, **filters)
         except Exception as exc:
@@ -128,6 +154,12 @@ class SearchDialog:
             self.results_list.selection_set(0)
             self.results_list.activate(0)
         logger.info("Search dialog found %d match(es)", len(self.matches))
+
+    @staticmethod
+    def _date_validation_error(filters: dict[str, str]) -> str | None:
+        return validate_date_filter(filters.get("date_from", ""), "from date") or validate_date_filter(
+            filters.get("date_to", ""), "to date"
+        )
 
     def _build_results_window(self, query: str) -> None:
         self.window = tk.Toplevel(self.parent)
@@ -645,8 +677,17 @@ class ExportDialog(tk.Toplevel):
         format_name = self._selected_format()
         filters = self._export_filters()
         destination = self.destination_var.get().strip()
+        validation_error = self._date_validation_error(filters)
+        if validation_error is not None:
+            self._report_error(validation_error)
+            return
         try:
-            result = self.storage.export_notes(format_name, destination, **filters)
+            result = self.storage.export_notes(format_name, destination, reject_empty=True, **filters)
+            if not result.success and "No notes" in (result.message or ""):
+                if not self._confirm_empty_export(result.message):
+                    self._report_error(result.message)
+                    return
+                result = self.storage.export_notes(format_name, destination, reject_empty=False, **filters)
             if not result.success or not result.path:
                 raise RuntimeError(result.error or result.message or "Export failed.")
             message = f"Exported: {result.path}"
@@ -657,8 +698,23 @@ class ExportDialog(tk.Toplevel):
             self.destroy()
         except Exception as exc:
             logger.exception("ChronoNotes export failed")
-            message = f"Export failed: {exc}"
-            if self.on_error is not None:
-                self.on_error(message)
-            else:
-                show_error(self, "Export ChronoNotes", message)
+            self._report_error(f"Export failed: {exc}")
+
+    @staticmethod
+    def _date_validation_error(filters: dict[str, str]) -> str | None:
+        return validate_date_filter(filters.get("date_from", ""), "from date") or validate_date_filter(
+            filters.get("date_to", ""), "to date"
+        )
+
+    def _confirm_empty_export(self, message: str) -> bool:
+        return confirm_yes_no(
+            self,
+            "Export ChronoNotes",
+            f"{message} Create an empty export file anyway?",
+        )
+
+    def _report_error(self, message: str) -> None:
+        if self.on_error is not None:
+            self.on_error(message)
+        else:
+            show_error(self, "Export ChronoNotes", message)
