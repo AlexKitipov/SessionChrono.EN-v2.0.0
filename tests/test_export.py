@@ -119,6 +119,61 @@ class ExportServiceTests(unittest.TestCase):
         self.assertEqual(Path(result.path), destination.resolve())
         self.assertTrue(destination.exists())
 
+    def test_export_notes_reports_invalid_from_date_filter(self):
+        result = self.storage.export_json("invalid.json", date_from="not-a-date")
+
+        self.assertFalse(result.success)
+        self.assertIn("Invalid from date", result.message)
+        self.assertFalse(Path(result.path).exists())
+
+    def test_export_notes_reject_empty_prevents_file_creation(self):
+        result = self.storage.export_json(
+            "empty.json",
+            date_from="2026-06-12",
+            date_to="2026-06-12",
+            reject_empty=True,
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("No notes found for export", result.message)
+        self.assertFalse(Path(result.path).exists())
+
+    def test_export_dialog_confirms_empty_export_before_retrying(self):
+        calls = []
+        dialog = ExportDialog.__new__(ExportDialog)
+        dialog.format_var = type("Var", (), {"get": lambda self: "JSON (.json)"})()
+        dialog.date_from_var = type("Var", (), {"get": lambda self: "2026-06-12"})()
+        dialog.date_to_var = type("Var", (), {"get": lambda self: "2026-06-12"})()
+        dialog.category_var = type("Var", (), {"get": lambda self: ""})()
+        dialog.destination_var = type("Var", (), {"get": lambda self: "empty.json"})()
+        dialog.storage = self.storage
+        dialog.on_success = calls.append
+        dialog.on_error = lambda message: calls.append(f"error:{message}")
+        dialog.destroy = lambda: calls.append("destroyed")
+        dialog._confirm_empty_export = lambda message: calls.append(message) or True
+
+        dialog.run_export()
+
+        self.assertIn("No notes found for export.", calls)
+        self.assertTrue(any(call.startswith("Exported:") for call in calls))
+        self.assertIn("destroyed", calls)
+
+    def test_export_dialog_rejects_invalid_to_date_before_storage_call(self):
+        calls = []
+        dialog = ExportDialog.__new__(ExportDialog)
+        dialog.format_var = type("Var", (), {"get": lambda self: "JSON (.json)"})()
+        dialog.date_from_var = type("Var", (), {"get": lambda self: ""})()
+        dialog.date_to_var = type("Var", (), {"get": lambda self: "bad-date"})()
+        dialog.category_var = type("Var", (), {"get": lambda self: ""})()
+        dialog.destination_var = type("Var", (), {"get": lambda self: "unused.json"})()
+        dialog.storage = object()
+        dialog.on_success = calls.append
+        dialog.on_error = calls.append
+
+        dialog.run_export()
+
+        self.assertEqual(calls, ["Invalid to date: 'bad-date'. Use YYYY-MM-DD."])
+
     def test_export_dialog_uses_format_specific_default_extensions(self):
         self.assertEqual(ExportDialog._default_extension("txt"), ".txt")
         self.assertEqual(ExportDialog._default_extension("json"), ".json")

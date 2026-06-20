@@ -61,7 +61,12 @@ class StorageManagerTests(unittest.TestCase):
         result = self.storage.create_today_zip(date(2026, 6, 11))
 
         self.assertFalse(result.success)
-        self.assertIn("No notes", result.message)
+        self.assertEqual(result.message, "No notes found for export.")
+        self.assertFalse(Path(result.path).exists())
+
+    def test_search_logs_reports_invalid_to_date_filter(self):
+        with self.assertRaisesRegex(ValueError, "Invalid to date"):
+            self.storage.search_logs(date_to="not-a-date")
 
     def test_export_hooks_can_be_registered(self):
         def exporter(notes_dir, destination):

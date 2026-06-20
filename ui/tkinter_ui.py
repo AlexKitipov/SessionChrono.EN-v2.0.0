@@ -376,7 +376,7 @@ class SessionChronoUI(tk.Tk):
             zip_result = self.controller.create_today_zip()
             zip_path = zip_result.path
             if not zip_result.success or not zip_path:
-                self.status_var.set("No logs for today.")
+                self.status_var.set(zip_result.message or "No notes found for export.")
                 self.sound.play("error")
                 return
             logger.info("Created ZIP from UI action: %s", zip_path)
