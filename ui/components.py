@@ -39,7 +39,7 @@ class LastCopiedPanel(ttk.Frame):
         self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
         ttk.Label(self, text="Last Copied", font=FONT_LABEL_BOLD).grid(row=0, column=0, sticky="w")
-        self.scroller = ScrollableText(self, height=12)
+        self.scroller = ScrollableText(self, height=12, read_only=True)
         self.scroller.grid(row=1, column=0, sticky="nsew")
         self.text = self.scroller.text
 

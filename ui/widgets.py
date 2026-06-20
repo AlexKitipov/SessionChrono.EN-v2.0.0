@@ -27,17 +27,20 @@ logger = get_logger()
 
 
 class RightClickMenu:
-    """Attach a copy/cut/paste/select-all/clear context menu to a text widget."""
+    """Attach a text widget context menu with optional read-only commands."""
 
-    def __init__(self, widget: tk.Text):
+    def __init__(self, widget: tk.Text, *, read_only: bool = False):
         self.widget = widget
+        self.read_only = read_only
         self.menu = create_dark_menu(widget)
         self.menu.add_command(label="Copy", command=self.copy)
-        self.menu.add_command(label="Cut", command=self.cut)
-        self.menu.add_command(label="Paste", command=self.paste)
+        if not read_only:
+            self.menu.add_command(label="Cut", command=self.cut)
+            self.menu.add_command(label="Paste", command=self.paste)
         self.menu.add_separator()
         self.menu.add_command(label="Select All", command=self.select_all)
-        self.menu.add_command(label="Clear", command=self.clear)
+        if not read_only:
+            self.menu.add_command(label="Clear", command=self.clear)
 
         widget.bind("<Button-3>", self.show_menu)
 
@@ -56,6 +59,8 @@ class RightClickMenu:
             logger.debug("Right-click copy ignored because no selection was available", exc_info=True)
 
     def cut(self) -> None:
+        if self.read_only:
+            return
         try:
             text = self.widget.get("sel.first", "sel.last")
             self.widget.clipboard_clear()
@@ -65,6 +70,8 @@ class RightClickMenu:
             logger.debug("Right-click cut ignored because no selection was available", exc_info=True)
 
     def paste(self) -> None:
+        if self.read_only:
+            return
         try:
             text = self.widget.clipboard_get()
             self.widget.insert(tk.INSERT, text)
@@ -75,6 +82,8 @@ class RightClickMenu:
         self.widget.tag_add("sel", "1.0", "end")
 
     def clear(self) -> None:
+        if self.read_only:
+            return
         self.widget.delete("1.0", "end")
 
 
@@ -88,8 +97,10 @@ class ScrollableText(tk.Frame):
         font: tuple = FONT_PREVIEW,
         height: int | None = None,
         undo: bool = False,
+        read_only: bool = False,
     ):
         super().__init__(parent, bg=COLOR_PANEL_BG)
+        self.read_only = read_only
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -104,17 +115,29 @@ class ScrollableText(tk.Frame):
 
         self.text.grid(row=0, column=0, sticky="nsew")
         self.scrollbar.grid(row=0, column=1, sticky="ns")
-        self.context_menu = RightClickMenu(self.text)
+        if self.read_only:
+            self.text.configure(state=tk.DISABLED)
+        self.context_menu = RightClickMenu(self.text, read_only=read_only)
 
     def get_text(self) -> str:
         return self.text.get("1.0", tk.END)
 
     def set_text(self, content: str) -> None:
+        previous_state = str(self.text.cget("state"))
+        if previous_state == tk.DISABLED:
+            self.text.configure(state=tk.NORMAL)
         self.text.delete("1.0", tk.END)
         self.text.insert("1.0", content)
+        if previous_state == tk.DISABLED:
+            self.text.configure(state=tk.DISABLED)
 
     def clear(self) -> None:
+        previous_state = str(self.text.cget("state"))
+        if previous_state == tk.DISABLED:
+            self.text.configure(state=tk.NORMAL)
         self.text.delete("1.0", tk.END)
+        if previous_state == tk.DISABLED:
+            self.text.configure(state=tk.DISABLED)
 
 
 class ClipboardHistoryList(tk.Frame):
