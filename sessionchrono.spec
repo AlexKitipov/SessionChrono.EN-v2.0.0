@@ -14,6 +14,11 @@ ROOT = Path(SPECPATH).resolve()
 APP_NAME = "SessionChrono"
 APP_VERSION = "2.0.0"
 
+# These directory names must stay aligned with core.config.  The README and
+# .gitkeep files are intentionally bundled so the resource directories exist in
+# a one-folder build even when no approved binary icon or WAV assets are present.
+RESOURCE_DIRECTORIES = ("icons", "sounds", "config_templates")
+
 
 def tree_data(directory: str) -> list[tuple[str, str]]:
     """Return PyInstaller data-file tuples for every file under *directory*."""
@@ -29,9 +34,8 @@ def tree_data(directory: str) -> list[tuple[str, str]]:
 
 
 datas = []
-datas += tree_data("icons")
-datas += tree_data("sounds")
-datas += tree_data("config_templates")
+for resource_directory in RESOURCE_DIRECTORIES:
+    datas += tree_data(resource_directory)
 
 hiddenimports = [
     # Clipboard backends and Windows clipboard support.

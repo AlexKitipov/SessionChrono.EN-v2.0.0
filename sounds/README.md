@@ -1,7 +1,7 @@
 # Sound asset policy
 
-This directory is reserved for optional SessionChrono notification sound sources or text documentation.
+This directory is intentionally source-controlled as an optional resource directory for SessionChrono notification sounds. It should ship without real WAV assets for the v2.0.0 release candidate.
 
-For this v2.0.0 release-candidate PR, no generated WAV or other binary sound files are added. The application already falls back to platform beeps or the Tk bell when optional WAV files are absent, so packaging remains reproducible without committed binary sound assets.
+The application can run with no committed sound binaries: `ui.sounds.SoundManager` looks for optional WAV files under the `SOUNDS_DIR` path from `core.config`, and falls back to platform beeps or the Tk bell when a specific file is missing. Keeping this directory text-only avoids unreviewed binary assets while preserving the runtime path expected by source and PyInstaller builds.
 
-If final WAV assets are created for a later release, keep packaging-generated files out of Git and document the asset provenance before committing any approved source asset.
+Packaging keeps this directory in the bundle by collecting the text placeholders in `sessionchrono.spec`. If final WAV assets are approved for a later release, add only source-approved files, document their provenance here, and keep generated release artifacts out of Git.
