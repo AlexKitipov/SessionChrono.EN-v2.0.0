@@ -37,6 +37,22 @@ datas = []
 for resource_directory in RESOURCE_DIRECTORIES:
     datas += tree_data(resource_directory)
 
+# Keep PyInstaller analysis focused on the supported Windows/Tkinter app.
+# These modules are optional, platform-specific clipboard/runtime backends that
+# otherwise show up in warn-*.txt as unresolved imports during Windows builds.
+excludes = [
+    "AppKit",
+    "Foundation",
+    "PyQt5",
+    "_winreg",
+    "java",
+    "java.lang",
+    "org",
+    "org.python",
+    "qtpy",
+    "vms_lib",
+]
+
 hiddenimports = [
     # Clipboard backends and Windows clipboard support.
     "pyperclip",
@@ -81,7 +97,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

@@ -95,6 +95,7 @@ python -m PyInstaller --clean --noconfirm sessionchrono.spec
 ```
 
 - [ ] Confirm `dist/SessionChrono/` exists locally.
+- [ ] Review `build/SessionChrono/warn-SessionChrono.txt`. PyInstaller may still list harmless interpreter internals or unavailable POSIX modules when building on Windows, but optional Java, macOS, Qt, VMS, and legacy registry imports are intentionally excluded by `sessionchrono.spec` to keep the warning file focused on actionable entries.
 - [ ] Confirm bundled resources are present in the generated output: `icons/`, `sounds/`, and `config_templates/`.
 - [ ] Launch the executable.
 - [ ] Confirm frozen user data is written to the per-user application data root, not the executable directory.
