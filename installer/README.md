@@ -18,6 +18,8 @@ python -m PyInstaller --clean --noconfirm sessionchrono.spec
 ISCC.exe installer\SessionChrono.iss
 ```
 
+The Inno Setup script installs the complete PyInstaller one-folder output, so bundled `_internal\icons`, `_internal\sounds`, and `_internal\config_templates` resources are carried through to the installed application. For v2.0.0, the optional `icons/` and `sounds/` directories are expected to contain only text placeholders unless separately approved assets are added.
+
 The expected installer output is:
 
 ```text

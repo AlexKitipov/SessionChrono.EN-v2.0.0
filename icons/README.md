@@ -1,7 +1,7 @@
 # Icon asset policy
 
-This directory is reserved for source-controlled icon templates and other text-based artwork notes used by SessionChrono packaging.
+This directory is intentionally source-controlled as an optional resource directory for SessionChrono icon templates and artwork notes. It should ship without additional generated icon binaries for the v2.0.0 release candidate.
 
-For this v2.0.0 release-candidate PR, no generated binary icon files are added here. If release artwork is produced locally, keep generated `.ico`, `.png`, or other binary render outputs out of the commit unless a future release task explicitly approves them as source assets.
+The packaging entry points use the repository-level `SessionChrono.ico` for the Windows executable and installer icon. Runtime code should resolve optional future icon resources through the `ICONS_DIR` path from `core.config`; that path is mirrored in PyInstaller by `sessionchrono.spec`.
 
-The PyInstaller and Inno Setup scripts currently reference the repository-level `SessionChrono.ico` when a local Windows package is built. Any replacement artwork should be reviewed as an asset-source change separately from generated build artifacts.
+Packaging keeps this directory in the bundle by collecting the text placeholders in `sessionchrono.spec`. If replacement artwork is approved later, document its provenance here and keep generated build outputs out of Git unless a release task explicitly approves them as source assets.

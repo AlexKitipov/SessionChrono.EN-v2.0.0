@@ -10,9 +10,9 @@ Use this checklist when preparing a v2.0.0 release. It is designed for source va
 - [ ] Confirm the About dialog displays the same version.
 - [ ] Confirm README, installation guide, development guide, deploy checklist, and changelog mention the intended release.
 - [ ] Confirm package resource and metadata files are present:
-  - `SessionChrono.ico` for local Windows builds when approved as a source asset
-  - `icons/README.md` and optional approved icon source files
-  - `sounds/README.md` and optional approved sound source files
+  - `SessionChrono.ico` for local Windows builds as the approved executable/installer icon
+  - `icons/README.md` and `icons/.gitkeep` as text placeholders; optional approved icon source files only when provenance is documented
+  - `sounds/README.md` and `sounds/.gitkeep` as text placeholders; optional approved sound source files only when provenance is documented
   - `config_templates/default_settings.json`
   - `sessionchrono.spec`
   - `version_info.txt`

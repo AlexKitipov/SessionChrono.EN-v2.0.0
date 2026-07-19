@@ -45,6 +45,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
+; Install the complete PyInstaller one-folder output, including _internal\icons,
+; _internal\sounds, and _internal\config_templates as collected by
+; sessionchrono.spec from paths defined in core/config.py.
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

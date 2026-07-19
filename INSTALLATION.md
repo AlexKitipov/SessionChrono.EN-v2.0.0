@@ -96,10 +96,12 @@ Expected one-folder artifact:
 dist/SessionChrono/
 ├── SessionChrono.exe      # Windows name; platform-specific on macOS/Linux
 └── _internal/             # PyInstaller runtime files and bundled resources
-    ├── icons/
-    ├── sounds/
+    ├── icons/             # text placeholders only unless approved assets are added
+    ├── sounds/            # text placeholders only unless approved WAV files are added
     └── config_templates/
 ```
+
+The v2.0.0 release candidate intentionally ships the `icons/` and `sounds/` resource directories without additional real binary assets. The repository-level `SessionChrono.ico` remains the executable and installer icon, and missing WAV files fall back to platform beeps/Tk bell behavior. These resource directory names must stay aligned with `ICONS_DIR`, `SOUNDS_DIR`, and `CONFIG_TEMPLATES_DIR` in `core.config`.
 
 Run the executable from `dist/SessionChrono/`. Before distributing, smoke-test `python main.py --paths` in source mode and the generated executable in frozen mode to verify `core.config` resolves bundled resources and per-user writable data paths correctly. Do not store user data inside the executable folder; frozen builds write to the per-user data root described below.
 
